@@ -1,23 +1,22 @@
 @echo off
-chcp 65001 > nul
 echo ==================================================
-echo Photo Arranger App ビルドスクリプト (Windows用)
+echo Photo Arranger App Build Script (Windows)
 echo ==================================================
 
-:: venvの存在確認
+:: Check if venv exists
 if not exist "venv" (
-    echo [エラー] venv (Python仮想環境) がフォルダ内に見つかりません。
-    echo 先に仮想環境を作成し、依存関係をセットアップしてください。
-    echo コマンド例: python -m venv venv
+    echo [Error] venv [Python virtual environment] not found in this folder.
+    echo Please create the virtual environment and set up dependencies first.
+    echo Example command: python -m venv venv
     pause
     exit /b 1
 )
 
-echo 1. 依存ライブラリ (PyInstaller, pillow, Flask) のインストール/更新...
+echo 1. Installing/updating dependencies (PyInstaller, pillow, Flask)...
 call .\venv\Scripts\pip.exe install pyinstaller pillow Flask
 
-echo 2. スタンドアローン.exe のビルドを開始...
-:: Windows用のPyInstallerでは --add-data の区切り文字にセミコロン (;) を使用します
+echo 2. Building standalone .exe...
+:: In PyInstaller for Windows, use semicolon (;) as path separator for --add-data
 call .\venv\Scripts\pyinstaller.exe --onefile --windowed ^
   --icon="assets\icon.ico" ^
   --add-data "templates;templates" ^
@@ -26,7 +25,7 @@ call .\venv\Scripts\pyinstaller.exe --onefile --windowed ^
   app.py
 
 echo ==================================================
-echo ビルドが完了しました。
-echo 'dist' フォルダ内に 'PhotoArranger.exe' が生成されています。
+echo Build completed successfully!
+echo 'PhotoArranger.exe' has been generated in the 'dist' folder.
 echo ==================================================
 pause
