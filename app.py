@@ -4,6 +4,7 @@ import json
 import subprocess
 import signal
 import sys
+import platform
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, render_template, request, Response, jsonify
@@ -28,21 +29,44 @@ def index():
 @app.route('/api/select-dir', methods=['POST'])
 def select_dir():
     try:
-        # macOSネイティブのフォルダ選択ダイアログをAppleScript経由で開く
-        script = 'POSIX path of (choose folder with prompt "フォルダを選択してください")'
-        process = subprocess.Popen(
-            ['osascript', '-e', script],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
-        stdout, stderr = process.communicate()
-        
-        if process.returncode == 0:
-            path = stdout.strip()
-            return jsonify({'path': path})
-        else:
+        system = platform.system()
+        if system == 'Darwin':
+            # macOSネイティブのフォルダ選択ダイアログをAppleScript経由で開く
+            script = 'POSIX path of (choose folder with prompt "フォルダを選択してください")'
+            process = subprocess.Popen(
+                ['osascript', '-e', script],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            stdout, stderr = process.communicate()
+            if process.returncode == 0:
+                return jsonify({'path': stdout.strip()})
             return jsonify({'path': ''})
+            
+        elif system == 'Windows':
+            # Windowsネイティブのフォルダ選択ダイアログをPowerShell経由で開く
+            script = (
+                "[System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms') | Out-Null; "
+                "$f = New-Object System.Windows.Forms.FolderBrowserDialog; "
+                "$f.Description = 'フォルダを選択してください'; "
+                "if($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { $f.SelectedPath }"
+            )
+            process = subprocess.Popen(
+                ['powershell', '-Command', script],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            stdout, stderr = process.communicate()
+            if process.returncode == 0:
+                return jsonify({'path': stdout.strip()})
+            return jsonify({'path': ''})
+            
+        else:
+            return jsonify({'error': '未対応のOSです。手動でパスを入力してください。'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
