@@ -2,12 +2,12 @@ import os
 import subprocess
 from PIL import Image
 
-base_path = 'icon_base.png'
+base_path = 'assets/icon_base.png'
 
 # 1. ICOの作成
 print("Creating icon.ico...")
 img = Image.open(base_path)
-img.save('icon.ico', format='ICO', sizes=[(256, 256), (128, 128), (64, 64), (48, 48), (32, 32), (16, 16)])
+img.save('assets/icon.ico', format='ICO', sizes=[(256, 256), (128, 128), (64, 64), (48, 48), (32, 32), (16, 16)])
 
 # 2. ICNSの作成
 print("Creating icon.icns...")
@@ -22,13 +22,12 @@ sizes = [
 
 for size, name in sizes:
     output_png = os.path.join(iconset_dir, f'icon_{name}.png')
-    # -s format png でPNGに強制変換
     subprocess.run([
         'sips', '-s', 'format', 'png', '-z', str(size), str(size), base_path, '--out', output_png
     ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-# iconutilでicnsに変換
-subprocess.run(['iconutil', '-c', 'icns', iconset_dir])
+# iconutilでicnsに変換、出力先をassets/icon.icnsに指定
+subprocess.run(['iconutil', '-c', 'icns', '-o', 'assets/icon.icns', iconset_dir])
 
 # 中間生成物の削除
 for size, name in sizes:

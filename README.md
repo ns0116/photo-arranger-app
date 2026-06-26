@@ -39,11 +39,32 @@
    ```bash
    ./venv/bin/python3 app.py
    ```
-2. ブラウザで **[http://127.0.0.1:5001](http://127.0.0.1:5001)** にアクセスします。
+2. ブラウザで **[http://127.0.0.1:5001](http://127.0.0.1:5001)** にアクセスします。（ポート `5001` が競合している場合は、自動的に `5002` 以降の空きポートで起動します）
 3. 画面の「選択」ボタンをクリックし、ダイアログから「コピー元」および「コピー先」のフォルダを指定します。
 4. 処理モード（コピー / 移動）やフォルダ命名規則を選択します。
 5. 「シミュレーション」ボタンで事前に確認した後、「整理を実行する」をクリックします。
 6. 使用後は、画面右上の「電源マーク」からサーバーを終了してください。
+
+### ディレクトリ構造
+```
+photo-arranger-app/
+├── app.py              # Flask バックエンドサーバーのメインプログラム
+├── templates/          # UIテンプレート (HTML)
+│   └── index.html
+├── static/             # フロントエンドの静的アセット (CSS, JS)
+│   ├── style.css
+│   └── main.js
+├── assets/             # アプリで使用するアイコンアセット類
+│   ├── icon_base.png   # アイコン元の高解像度画像
+│   ├── icon.icns       # macOS アプリ用アイコン
+│   └── icon.ico        # Windows アプリ用アイコン
+├── scripts/            # 開発・ビルドユーティリティスクリプト
+│   └── convert_icons.py # PNG画像から各種アイコンを自動生成するスクリプト
+├── build_app.sh        # macOS用アプリビルドスクリプト (.app生成)
+├── build_app.bat       # Windows用アプリビルドスクリプト (.exe生成)
+├── README.md
+└── .gitignore
+```
 
 ---
 
@@ -82,8 +103,29 @@ Evolved from a basic shell script `arrange_photos_yyyymmdd.sh`, this tool now of
    ```bash
    ./venv/bin/python3 app.py
    ```
-2. Navigate to **[http://127.0.0.1:5001](http://127.0.0.1:5001)** in your browser.
+2. Navigate to **[http://127.0.0.1:5001](http://127.0.0.1:5001)** in your browser. (If port `5001` is already in use, the server dynamically binds to the next available port, e.g. `5002`.)
 3. Use the "Select" buttons to choose source and destination directories through the macOS native dialogs.
 4. Set the processing mode (Copy / Move) and Folder Naming Rule.
 5. Optionally click "Simulation" to preview the results, then click "Run Organizer".
 6. When finished, shut down the server by clicking the power icon in the top-right corner.
+
+### Directory Structure
+```
+photo-arranger-app/
+├── app.py              # Main Flask backend server program
+├── templates/          # UI Templates (HTML)
+│   └── index.html
+├── static/             # Frontend static assets (CSS, JS)
+│   ├── style.css
+│   └── main.js
+├── assets/             # App icon assets
+│   ├── icon_base.png   # Original high-res icon image
+│   ├── icon.icns       # macOS app icon
+│   └── icon.ico        # Windows app icon
+├── scripts/            # Utility development scripts
+│   └── convert_icons.py # Automation script to convert PNG to multi-format icons
+├── build_app.sh        # macOS standalone build script (generates .app)
+├── build_app.bat       # Windows standalone build script (generates .exe)
+├── README.md
+└── .gitignore
+```
