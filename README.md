@@ -7,7 +7,7 @@
 ## 日本語
 
 ### 概要
-**Photo Arranger** は、複数のフォルダから写真を自動で収集し、ファイルの更新日時（mtime）や写真ファイルに埋め込まれている **EXIF 撮影日時** を自動解析して、日付別のフォルダ（例: `YYYY-MM-DD`）へきれいに分類・整理する Flask ベースの Web アプリケーションです。
+**Photo Arranger** は、複数のフォルダから写真を自動で収集し、ファイルの更新日時（mtime）や写真ファイルに埋め込まれている **EXIF 撮影日時** を自動解析して、日付別のフォルダ（例: `YYYY-MM-DD`）へきれいに分類・整理する Flask ベース of Web アプリケーションです。
 
 もともとシェルスクリプト `arrange_photos_yyyymmdd.sh` で行っていた処理をベースに、ガラスモフィズムを取り入れたプレミアムな UI と高度な整理機能を備えたローカルツールとして進化させました。
 
@@ -17,13 +17,14 @@
 3. **フォルダ命名規則の変更**: `YYYY-MM-DD`、階層化された `YYYY/MM/DD`、月ごとの `YYYY/MM`、区切り文字なしの `YYYYMMDD` など、自由な命名規則を選択可能です。
 4. **シミュレーション (Dry Run) モード**: 実際にファイルを動かす前に、どのような分類が行われるかを画面上でプレビュー確認できます。
 5. **安全な移動（Move）モード**: コピー後にファイルが破損していないかを完全に検証した上で、元のファイルを削除する安全な「ファイル移動」に対応しています。
-6. **重複・名前衝突の回避**: コピー先に同名ファイルがある場合、ファイルサイズを比較し、同じものであれば自動スキップ、異なるものであれば `photo_1.jpg` のように自動でリネームして保存します。
+6. **重複・名前衝突 of 回避**: コピー先に同名ファイルがある場合、ファイルサイズを比較し、同じものであれば自動スキップ、異なるものであれば `photo_1.jpg` のように自動でリネームして保存します。
 7. **並行処理による高速化**: `ThreadPoolExecutor` を用いて、大量の写真コピー/移動処理を並行して高速に実行します。
 8. **中断（キャンセル）機能**: 処理中にいつでも安全にタスクを中断できます。
 9. **シャットダウン機能**: アプリ画面からローカルサーバープロセスを安全に終了できます。
 
 ### システム要件
 - macOS (AppleScript 連携によるフォルダ選択ダイアログを使用するため)
+- Windows
 - Python 3.8 以上
 
 ### セットアップ方法
@@ -41,6 +42,7 @@
    ```
 2. ブラウザで **[http://127.0.0.1:5001](http://127.0.0.1:5001)** にアクセスします。（ポート `5001` が競合している場合は、自動的に `5002` 以降の空きポートで起動します）
 3. 画面の「選択」ボタンをクリックし、ダイアログから「コピー元」および「コピー先」のフォルダを指定します。
+   - ※お試し用に `tests/` フォルダの中にダミーの写真フォルダ（`test_src1`, `test_src2` 等）を用意しています。
 4. 処理モード（コピー / 移動）やフォルダ命名規則を選択します。
 5. 「シミュレーション」ボタンで事前に確認した後、「整理を実行する」をクリックします。
 6. 使用後は、画面右上の「電源マーク」からサーバーを終了してください。
@@ -62,6 +64,7 @@ photo-arranger-app/
 │   └── convert_icons.py # PNG画像から各種アイコンを自動生成するスクリプト
 ├── build_app.sh        # macOS用アプリビルドスクリプト (.app生成)
 ├── build_app.bat       # Windows用アプリビルドスクリプト (.exe生成)
+├── tests/              # 動作確認・テスト用のモックフォルダ群（Git除外対象）
 ├── README.md
 └── .gitignore
 ```
@@ -88,6 +91,7 @@ Evolved from a basic shell script `arrange_photos_yyyymmdd.sh`, this tool now of
 
 ### Requirements
 - macOS (leveraging AppleScript integration for native directory dialogs)
+- Windows
 - Python 3.8 or higher
 
 ### Setup
@@ -104,7 +108,8 @@ Evolved from a basic shell script `arrange_photos_yyyymmdd.sh`, this tool now of
    ./venv/bin/python3 app.py
    ```
 2. Navigate to **[http://127.0.0.1:5001](http://127.0.0.1:5001)** in your browser. (If port `5001` is already in use, the server dynamically binds to the next available port, e.g. `5002`.)
-3. Use the "Select" buttons to choose source and destination directories through the macOS native dialogs.
+3. Use the "Select" buttons to choose source and destination directories through the native OS dialogs.
+   - ※ For quick testing, you can use the dummy photo directories (`test_src1`, `test_src2` etc.) provided under the `tests/` folder.
 4. Set the processing mode (Copy / Move) and Folder Naming Rule.
 5. Optionally click "Simulation" to preview the results, then click "Run Organizer".
 6. When finished, shut down the server by clicking the power icon in the top-right corner.
@@ -126,6 +131,7 @@ photo-arranger-app/
 │   └── convert_icons.py # Automation script to convert PNG to multi-format icons
 ├── build_app.sh        # macOS standalone build script (generates .app)
 ├── build_app.bat       # Windows standalone build script (generates .exe)
+├── tests/              # Mock directories for testing (Git ignored)
 ├── README.md
 └── .gitignore
 ```
