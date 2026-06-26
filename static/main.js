@@ -141,6 +141,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // 修正 #13: シャットダウン画面HTMLを関数に抽出して重複を解消
+    function showShutdownScreen() {
+        document.body.innerHTML = `
+            <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:100vh;color:#f3f4f6;background-color:#080b11;font-family:sans-serif;text-align:center;padding:2rem;">
+                <i class="fa-solid fa-power-off" style="font-size:4rem;color:#ef4444;margin-bottom:1.5rem;text-shadow:0 0 20px rgba(239,68,68,0.4)"></i>
+                <h1 style="font-size:1.8rem;margin-bottom:1rem;">サーバーを終了しました</h1>
+                <p style="color:#9ca3af;font-size:1rem;">ブラウザのタブを閉じて問題ありません。</p>
+            </div>
+        `;
+    }
+
     // Shutdown backend server
     btnShutdown.addEventListener('click', async () => {
         if (!confirm('サーバーをシャットダウンしますか？終了すると再度起動するまでアプリは利用できなくなります。')) {
@@ -149,25 +160,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             addLog('サーバーのシャットダウン要求を送信しました...', 'error');
-            const response = await fetch('/api/shutdown', { method: 'POST' });
-            const data = await response.json();
-            
-            document.body.innerHTML = `
-                <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:100vh;color:#f3f4f6;background-color:#080b11;font-family:sans-serif;text-align:center;padding:2rem;">
-                    <i class="fa-solid fa-power-off" style="font-size:4rem;color:#ef4444;margin-bottom:1.5rem;text-shadow:0 0 20px rgba(239,68,68,0.4)"></i>
-                    <h1 style="font-size:1.8rem;margin-bottom:1rem;">サーバーを終了しました</h1>
-                    <p style="color:#9ca3af;font-size:1rem;">ブラウザのタブを閉じて問題ありません。</p>
-                </div>
-            `;
+            await fetch('/api/shutdown', { method: 'POST' });
+            showShutdownScreen();
         } catch (error) {
             // シャットダウン成功時は接続切断でエラーになることがあるため、強制的に終了画面を表示
-            document.body.innerHTML = `
-                <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:100vh;color:#f3f4f6;background-color:#080b11;font-family:sans-serif;text-align:center;padding:2rem;">
-                    <i class="fa-solid fa-power-off" style="font-size:4rem;color:#ef4444;margin-bottom:1.5rem;text-shadow:0 0 20px rgba(239,68,68,0.4)"></i>
-                    <h1 style="font-size:1.8rem;margin-bottom:1rem;">サーバーを終了しました</h1>
-                    <p style="color:#9ca3af;font-size:1rem;">ブラウザのタブを閉じて問題ありません。</p>
-                </div>
-            `;
+            showShutdownScreen();
         }
     });
 
@@ -346,16 +343,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (data.message) {
-            let type = 'info';
-            if (data.message.includes('コピー成功:') || data.message.includes('移動成功:') || data.message.startsWith('新規')) {
-                type = 'success';
-            } else if (data.message.includes('スキップ')) {
-                type = 'skip';
-            } else if (data.message.includes('エラー:')) {
-                type = 'error';
-            } else if (data.message.includes('衝突')) {
-                type = 'rename'; // Custom type for styling
-            }
+            // 修正 #12: 文字列マッチングをやめ、バックエンドから返る log_type フィールドを使用
+            const type = data.log_type || 'info';
             addLog(data.message, type);
         }
 

@@ -358,6 +358,8 @@ input[type="text"]:focus {
 .log-line.error { color: var(--danger); }
 .log-line.skip { color: var(--text-secondary); }
 .log-line.info { color: var(--info); }
+/* 修正 #16: リネーム時のログ行スタイルが欠落していたため追加 */
+.log-line.rename { color: #fbbf24; }
 
 /* Utilities */
 .hidden {

@@ -5,6 +5,7 @@ import subprocess
 import signal
 import sys
 import platform
+import threading
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, render_template, request, Response, jsonify
@@ -19,8 +20,15 @@ if getattr(sys, 'frozen', False):
 else:
     app = Flask(__name__)
 
-# グローバルなキャンセル要求フラグ
-is_cancelled = False
+# --- 修正 #2: グローバルなキャンセル要求フラグを threading.Event に変更 ---
+# bool 変数の代わりに threading.Event を使うことでスレッドセーフなシグナリングを実現する。
+cancel_event = threading.Event()
+
+# --- 修正 #7: EXIF読み取り対象の画像拡張子セット ---
+IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.tiff', '.tif', '.heic', '.heif', '.webp', '.bmp'}
+
+# --- 修正 #4: リネーム上限 ---
+MAX_RENAME_ATTEMPTS = 10000
 
 @app.route('/')
 def index():
@@ -39,11 +47,17 @@ def select_dir():
                 stderr=subprocess.PIPE,
                 text=True
             )
-            stdout, stderr = process.communicate()
+            # 修正 #8: communicate() にタイムアウトを設定（2分）
+            try:
+                stdout, stderr = process.communicate(timeout=120)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.communicate()
+                return jsonify({'path': ''})
             if process.returncode == 0:
                 return jsonify({'path': stdout.strip()})
             return jsonify({'path': ''})
-            
+
         elif system == 'Windows':
             # Windowsネイティブのフォルダ選択ダイアログをPowerShell経由で開く
             script = (
@@ -58,22 +72,26 @@ def select_dir():
                 stderr=subprocess.PIPE,
                 text=True
             )
-            stdout, stderr = process.communicate()
+            # 修正 #8: communicate() にタイムアウトを設定（2分）
+            try:
+                stdout, stderr = process.communicate(timeout=120)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.communicate()
+                return jsonify({'path': ''})
             if process.returncode == 0:
                 return jsonify({'path': stdout.strip()})
             return jsonify({'path': ''})
-            
+
         else:
             return jsonify({'error': '未対応のOSです。手動でパスを入力してください。'}), 400
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    # 修正 #1: 到達不能だった重複 except ブロックを削除
 
 @app.route('/api/cancel', methods=['POST'])
 def cancel():
-    global is_cancelled
-    is_cancelled = True
+    cancel_event.set()  # 修正 #2
     return jsonify({'message': 'キャンセルシグナルを送信しました。'})
 
 @app.route('/api/shutdown', methods=['POST'])
@@ -87,9 +105,14 @@ def shutdown():
 
 def get_exif_date(filepath):
     """画像ファイルからEXIF撮影日時を取得する"""
+    # 修正 #7: 画像拡張子以外のファイルは即リターン（パフォーマンス改善）
+    ext = os.path.splitext(filepath)[1].lower()
+    if ext not in IMAGE_EXTENSIONS:
+        return None
     try:
         with Image.open(filepath) as img:
-            exif_data = img._getexif()
+            # 修正 #11: プライベートAPI _getexif() を公式 API getexif() に変更
+            exif_data = img.getexif()
             if exif_data:
                 for tag, value in exif_data.items():
                     tag_name = TAGS.get(tag, tag)
@@ -108,10 +131,10 @@ def get_non_conflicting_path(dst_dir, folder_name, filename, src_filepath):
     """衝突しないコピー先パスを返す。同一内容（サイズ一致）なら skip フラグを立てる"""
     folder_path = os.path.join(dst_dir, folder_name)
     dst_filepath = os.path.join(folder_path, filename)
-    
+
     if not os.path.exists(dst_filepath):
         return dst_filepath, False
-        
+
     try:
         src_size = os.path.getsize(src_filepath)
         dst_size = os.path.getsize(dst_filepath)
@@ -119,16 +142,17 @@ def get_non_conflicting_path(dst_dir, folder_name, filename, src_filepath):
             return dst_filepath, True  # サイズ一致のためスキップ
     except Exception:
         pass
-        
+
     # ファイル名が衝突（サイズ不一致）したためリネーム
     base, ext = os.path.splitext(filename)
     counter = 1
-    while True:
+    # 修正 #4: 無限ループを防ぐためリネーム上限を設ける
+    while counter <= MAX_RENAME_ATTEMPTS:
         new_filename = f"{base}_{counter}{ext}"
         new_dst_filepath = os.path.join(folder_path, new_filename)
         if not os.path.exists(new_dst_filepath):
             return new_dst_filepath, False
-            
+
         try:
             if os.path.getsize(src_filepath) == os.path.getsize(new_dst_filepath):
                 return new_dst_filepath, True
@@ -136,31 +160,40 @@ def get_non_conflicting_path(dst_dir, folder_name, filename, src_filepath):
             pass
         counter += 1
 
+    raise RuntimeError(
+        f"リネーム上限 ({MAX_RENAME_ATTEMPTS}) に達しました: {filename} "
+        f"コピー先 '{folder_name}' に同名ファイルが多すぎます。"
+    )
+
 def process_file_task(s_dir, filename, dst_dir, date_format, mode, dry_run):
     """1つのファイルを処理するスレッド用タスク"""
-    global is_cancelled
-    if is_cancelled:
-        return {'status': 'cancelled', 'filename': filename, 'src_dir': os.path.basename(s_dir)}
-        
+    if cancel_event.is_set():  # 修正 #2
+        return {
+            'status': 'cancelled',
+            'filename': filename,
+            'src_dir': os.path.basename(s_dir),
+            'log_type': 'error'
+        }
+
     src_path = os.path.join(s_dir, filename)
     src_dirname = os.path.basename(s_dir)
-    
+
     try:
         # EXIF優先、なければ更新日時
         dt = get_exif_date(src_path)
         if not dt:
             mtime = os.path.getmtime(src_path)
             dt = datetime.fromtimestamp(mtime)
-            
+
         folder_name = dt.strftime(date_format)
-        
+
         if dry_run:
             folder_path = os.path.join(dst_dir, folder_name)
             dst_path = os.path.join(folder_path, filename)
-            
+
             action = 'copy'
             target_path = dst_path
-            
+
             if os.path.exists(dst_path):
                 try:
                     src_size = os.path.getsize(src_path)
@@ -173,10 +206,10 @@ def process_file_task(s_dir, filename, dst_dir, date_format, mode, dry_run):
                         target_path = resolved_path
                 except Exception:
                     action = 'error'
-            
+
             if mode == 'move' and action not in ('skip', 'error'):
                 action = 'move' if action == 'copy' else 'rename_move'
-                
+
             msg_map = {
                 'copy': f"新規コピー: {src_dirname}/{filename} -> {folder_name}/",
                 'move': f"新規移動: {src_dirname}/{filename} -> {folder_name}/",
@@ -185,7 +218,15 @@ def process_file_task(s_dir, filename, dst_dir, date_format, mode, dry_run):
                 'rename_move': f"名前衝突回避移動: {src_dirname}/{filename} -> {folder_name}/{os.path.basename(target_path)}",
                 'error': f"検証エラー: {src_dirname}/{filename}"
             }
-            
+
+            # 修正 #12: log_type フィールドを返し、フロントエンドの文字列マッチングを不要にする
+            log_type_map = {
+                'copy': 'success', 'move': 'success',
+                'skip': 'skip',
+                'rename': 'rename', 'rename_move': 'rename',
+                'error': 'error'
+            }
+
             return {
                 'status': 'success',
                 'filename': filename,
@@ -193,27 +234,32 @@ def process_file_task(s_dir, filename, dst_dir, date_format, mode, dry_run):
                 'folder': folder_name,
                 'action': action,
                 'target': os.path.basename(target_path),
-                'message': msg_map.get(action, f"予定: {src_dirname}/{filename} -> {folder_name}/")
+                'message': msg_map.get(action, f"予定: {src_dirname}/{filename} -> {folder_name}/"),
+                'log_type': log_type_map.get(action, 'info')
             }
-            
+
         # 実際の処理 (Copy または Move)
         dst_path, is_skip = get_non_conflicting_path(dst_dir, folder_name, filename, src_path)
         resolved_folder_path = os.path.dirname(dst_path)
         resolved_filename = os.path.basename(dst_path)
-        
+
         os.makedirs(resolved_folder_path, exist_ok=True)
-        
+
         copied = False
         action_done = 'skip'
-        
+        log_type = 'skip'
+
         if not is_skip:
             if mode == 'move':
                 # 安全な移動 (コピー後にファイルサイズを検証して削除)
+                # 注意: サイズベースの簡易検証のため、まれなディスクエラーは検出できない場合がある。
+                # より厳密な検証が必要な場合はチェックサム比較（hashlib.sha256等）を推奨する。
                 shutil.copy2(src_path, dst_path)
                 if os.path.exists(dst_path) and os.path.getsize(src_path) == os.path.getsize(dst_path):
                     os.remove(src_path)
                     copied = True
                     action_done = 'move'
+                    log_type = 'success'
                     message = f"移動成功: {src_dirname}/{filename} -> {folder_name}/{resolved_filename}"
                 else:
                     raise IOError("移動先ファイルのサイズ不一致。元ファイルを保護するため削除を中止しました。")
@@ -221,10 +267,11 @@ def process_file_task(s_dir, filename, dst_dir, date_format, mode, dry_run):
                 shutil.copy2(src_path, dst_path)
                 copied = True
                 action_done = 'copy'
+                log_type = 'success'
                 message = f"コピー成功: {src_dirname}/{filename} -> {folder_name}/{resolved_filename}"
         else:
             message = f"スキップ（既に存在します）: {src_dirname}/{filename} -> {folder_name}/{resolved_filename}"
-            
+
         return {
             'status': 'success',
             'filename': filename,
@@ -232,28 +279,29 @@ def process_file_task(s_dir, filename, dst_dir, date_format, mode, dry_run):
             'folder': folder_name,
             'action': action_done,
             'copied': copied,
-            'message': message
+            'message': message,
+            'log_type': log_type  # 修正 #12
         }
-        
+
     except Exception as e:
         return {
             'status': 'error',
             'filename': filename,
             'src_dir': src_dirname,
-            'message': f"エラー: {src_dirname}/{filename} の処理に失敗しました ({str(e)})"
+            'message': f"エラー: {src_dirname}/{filename} の処理に失敗しました ({str(e)})",
+            'log_type': 'error'  # 修正 #12
         }
 
 @app.route('/api/arrange', methods=['POST'])
 def arrange():
-    global is_cancelled
-    is_cancelled = False
-    
+    cancel_event.clear()  # 修正 #2: リセット
+
     data = request.json
     src_dirs = data.get('src_dirs')
     dst_dir = data.get('dst_dir')
     naming_rule = data.get('naming_rule', 'YYYY-MM-DD')
-    mode = data.get('mode', 'copy') # 'copy' or 'move'
-    dry_run = data.get('dry_run', False) # シミュレーションモード
+    mode = data.get('mode', 'copy')  # 'copy' or 'move'
+    dry_run = data.get('dry_run', False)  # シミュレーションモード
 
     if not src_dirs and data.get('src_dir'):
         src_dirs = [data.get('src_dir')]
@@ -283,7 +331,6 @@ def arrange():
     date_format = rule_mapping.get(naming_rule, '%Y-%m-%d')
 
     def generate():
-        global is_cancelled
         files_to_process = []
         for d in src_dirs:
             try:
@@ -292,37 +339,48 @@ def arrange():
                 for f in dir_files:
                     files_to_process.append((d, f))
             except Exception as e:
-                yield f"data: {json.dumps({'status': 'error', 'message': f'スキャンエラー ({d}): {str(e)}'}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'status': 'error', 'message': f'スキャンエラー ({d}): {str(e)}', 'log_type': 'error'}, ensure_ascii=False)}\n\n"
                 return
 
         total_files = len(files_to_process)
         if total_files == 0:
-            yield f"data: {json.dumps({'status': 'completed', 'message': '処理対象ファイルがありません。', 'progress': 100}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'status': 'completed', 'message': '処理対象ファイルがありません。', 'progress': 100, 'log_type': 'info'}, ensure_ascii=False)}\n\n"
             return
 
         copied_count = 0
         skipped_count = 0
         error_count = 0
-        
+
         # ディスクI/O重視のため最大4スレッド、Dry Runは8スレッド
         max_workers = 8 if dry_run else 4
-        
+
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {
                 executor.submit(process_file_task, s_dir, filename, dst_dir, date_format, mode, dry_run): (s_dir, filename)
                 for s_dir, filename in files_to_process
             }
-            
+
             for idx, future in enumerate(as_completed(futures)):
-                if is_cancelled:
-                    yield f"data: {json.dumps({'status': 'cancelled', 'message': 'ユーザーによって処理がキャンセルされました。'}, ensure_ascii=False)}\n\n"
+                if cancel_event.is_set():  # 修正 #2
+                    yield f"data: {json.dumps({'status': 'cancelled', 'message': 'ユーザーによって処理がキャンセルされました。', 'log_type': 'error'}, ensure_ascii=False)}\n\n"
                     # 未実行タスクのキャンセル試行
                     for f in futures:
                         f.cancel()
                     return
-                    
-                res = future.result()
-                
+
+                # 修正 #6: future.result() を try/except で保護
+                try:
+                    res = future.result()
+                except Exception as e:
+                    s_dir, filename = futures[future]
+                    res = {
+                        'status': 'error',
+                        'filename': filename,
+                        'src_dir': os.path.basename(s_dir),
+                        'message': f"エラー: {os.path.basename(s_dir)}/{filename} の処理中に予期しない例外が発生しました ({str(e)})",
+                        'log_type': 'error'
+                    }
+
                 if res['status'] == 'success':
                     act = res['action']
                     if act in ('copy', 'move', 'rename', 'rename_move'):
@@ -333,9 +391,9 @@ def arrange():
                         error_count += 1
                 else:
                     error_count += 1
-                    
+
                 progress = int((idx + 1) / total_files * 100)
-                
+
                 yield f"data: {json.dumps({
                     'status': 'processing',
                     'current_file': f"{res.get('src_dir')}/{res.get('filename')}",
@@ -343,6 +401,7 @@ def arrange():
                     'action': res.get('action'),
                     'progress': progress,
                     'message': res.get('message'),
+                    'log_type': res.get('log_type', 'info'),
                     'stats': {
                         'total': total_files,
                         'copied': copied_count,
@@ -355,26 +414,28 @@ def arrange():
         yield f"data: {json.dumps({
             'status': 'completed',
             'message': f'{status_text}: 合計 {total_files} 件 (完了/予定: {copied_count} 件, スキップ: {skipped_count} 件, エラー: {error_count} 件)',
-            'progress': 100
+            'progress': 100,
+            'log_type': 'success'
         }, ensure_ascii=False)}\n\n"
 
     return Response(generate(), mimetype='text/event-stream')
 
 if __name__ == '__main__':
-    import threading
     import webbrowser
     import time
     import socket
 
-    def find_free_port(start_port=5001):
+    def find_free_port(start_port=5001, max_port=9999):
+        # 修正 #9: ポート探索に上限を追加
         port = start_port
-        while True:
+        while port <= max_port:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 try:
                     s.bind(('127.0.0.1', port))
                     return port
                 except OSError:
                     port += 1
+        raise RuntimeError(f"ポート {start_port}〜{max_port} の範囲に空きポートが見つかりません。")
 
     # 空きポートを自動検出
     free_port = find_free_port(5001)
