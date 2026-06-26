@@ -1,0 +1,17 @@
+# Python Virtual Environment
+venv/
+
+# Python Cache
+__pycache__/
+*.pyc
+
+# OS Files
+.DS_Store
+
+# Test mock directories
+test_src/
+test_dst/
+test_src1/
+test_src2/
+test_dst_custom/
+test_dst_custom2/

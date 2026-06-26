@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Photo Arranger - 写真整理ツール</title>
+    <!-- Google Fonts: Inter & Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="background-glow bg-glow-1"></div>
+    <div class="background-glow bg-glow-2"></div>
+
+    <div class="app-container">
+        <header>
+            <div class="header-top">
+                <div class="logo">
+                    <i class="fa-solid fa-images-toggle logo-icon"></i>
+                    <h1>Photo Arranger</h1>
+                </div>
+                <button type="button" id="btn-shutdown" class="btn btn-danger-icon" title="サーバーを終了する">
+                    <i class="fa-solid fa-power-off"></i>
+                </button>
+            </div>
+            <p class="subtitle">EXIF撮影日時とファイル更新日時を自動解析して写真を整理します</p>
+        </header>
+
+        <main>
+            <section class="card setup-card">
+                <div class="card-header">
+                    <h2><i class="fa-solid fa-sliders"></i> 設定</h2>
+                </div>
+                
+                <!-- 複数ソースディレクトリ -->
+                <div class="form-group">
+                    <label>
+                        <i class="fa-regular fa-folder-open"></i> コピー元ディレクトリ
+                    </label>
+                    <div id="src-dirs-container" class="src-dirs-container">
+                        <div class="input-with-btn src-dir-row">
+                            <input type="text" class="src-dir-input" placeholder="整理する写真が入っているフォルダのパス" spellcheck="false">
+                            <button type="button" class="btn btn-secondary btn-select-src">
+                                <i class="fa-solid fa-magnifying-glass"></i> 選択
+                            </button>
+                            <button type="button" class="btn btn-danger btn-remove-src" style="display: none;">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <button type="button" id="btn-add-src" class="btn btn-outline btn-block-sm">
+                        <i class="fa-solid fa-plus"></i> コピー元フォルダを追加
+                    </button>
+                </div>
+
+                <!-- ターゲットディレクトリ -->
+                <div class="form-group">
+                    <label for="dst-dir">
+                        <i class="fa-solid fa-folder-tree"></i> コピー先（整理先）ディレクトリ
+                    </label>
+                    <div class="input-with-btn">
+                        <input type="text" id="dst-dir" placeholder="整理後のフォルダを作成するパス" spellcheck="false">
+                        <button type="button" id="btn-select-dst" class="btn btn-secondary">
+                            <i class="fa-solid fa-magnifying-glass"></i> 選択
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 処理モードトグル -->
+                <div class="form-group">
+                    <label><i class="fa-solid fa-gears"></i> 処理モード</label>
+                    <div class="toggle-container">
+                        <div class="toggle-option active" data-value="copy">
+                            <i class="fa-regular fa-copy"></i> コピー
+                        </div>
+                        <div class="toggle-option" data-value="move">
+                            <i class="fa-solid fa-arrows-turn-to-dots"></i> 移動 (元ファイル削除)
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 命名規則 -->
+                <div class="form-group">
+                    <label for="naming-rule">
+                        <i class="fa-solid fa-signature"></i> フォルダ命名規則
+                    </label>
+                    <select id="naming-rule" class="form-select">
+                        <option value="YYYY-MM-DD">YYYY-MM-DD (例: 2026-06-26)</option>
+                        <option value="YYYY/MM/DD">YYYY/MM/DD (例: 2026/06/26) - 階層フォルダ</option>
+                        <option value="YYYY/MM">YYYY/MM (例: 2026/06) - 月ごと階層</option>
+                        <option value="YYYYMMDD">YYYYMMDD (例: 20260626)</option>
+                        <option value="YYYY-MM">YYYY-MM (例: 2026-06)</option>
+                        <option value="YYYY">YYYY (例: 2026)</option>
+                    </select>
+                </div>
+
+                <!-- アクションボタン -->
+                <div class="action-buttons">
+                    <button type="button" id="btn-dryrun" class="btn btn-secondary flex-1">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> シミュレーション
+                    </button>
+                    <button type="button" id="btn-start" class="btn btn-primary flex-2">
+                        <i class="fa-solid fa-circle-play"></i> 整理を実行する
+                    </button>
+                </div>
+            </section>
+
+            <!-- プレビューカード -->
+            <section id="preview-card" class="card preview-card hidden">
+                <div class="card-header">
+                    <h2><i class="fa-solid fa-eye"></i> シミュレーション結果プレビュー</h2>
+                    <span id="preview-count" class="badge">0 件</span>
+                </div>
+                <p class="preview-desc">※シミュレーションのため、実際のファイル操作は行われていません。</p>
+                <div id="preview-list" class="preview-list"></div>
+            </section>
+
+            <!-- プログレスカード -->
+            <section id="progress-card" class="card progress-card hidden">
+                <div class="card-header">
+                    <h2>
+                        <i class="fa-solid fa-spinner fa-spin" id="progress-icon"></i> 
+                        <span id="progress-title">実行中</span>
+                    </h2>
+                    <div class="header-actions">
+                        <button type="button" id="btn-cancel" class="btn btn-danger-sm hidden">
+                            <i class="fa-solid fa-hand"></i> 中断
+                        </button>
+                        <span id="progress-percent" class="badge">0%</span>
+                    </div>
+                </div>
+                
+                <div class="progress-bar-container">
+                    <div id="progress-bar" class="progress-bar" style="width: 0%"></div>
+                </div>
+
+                <div class="status-summary">
+                    <div class="status-item">
+                        <span class="status-label">処理中のファイル</span>
+                        <span id="current-filename" class="status-value">-</span>
+                    </div>
+                    <div class="stats-grid">
+                        <div class="stat-box">
+                            <span class="stat-num" id="stat-total">0</span>
+                            <span class="stat-label">総件数</span>
+                        </div>
+                        <div class="stat-box success">
+                            <span class="stat-num" id="stat-copied">0</span>
+                            <span class="stat-label" id="stat-copied-label">コピー済</span>
+                        </div>
+                        <div class="stat-box info">
+                            <span class="stat-num" id="stat-skipped">0</span>
+                            <span class="stat-label">重複スキップ</span>
+                        </div>
+                        <div class="stat-box danger">
+                            <span class="stat-num" id="stat-errors">0</span>
+                            <span class="stat-label">エラー</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ログカード -->
+            <section id="log-card" class="card log-card hidden">
+                <div class="card-header">
+                    <h2><i class="fa-solid fa-terminal"></i> 実行ログ</h2>
+                    <button type="button" id="btn-clear-log" class="btn btn-text">クリア</button>
+                </div>
+                <div id="log-console" class="log-console"></div>
+            </section>
+        </main>
+
+        <footer>
+            <p>Photo Arranger App &copy; 2026</p>
+        </footer>
+    </div>
+
+    <script src="/static/main.js"></script>
+</body>
+</html>
