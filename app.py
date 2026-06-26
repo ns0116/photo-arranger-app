@@ -364,13 +364,27 @@ if __name__ == '__main__':
     import threading
     import webbrowser
     import time
+    import socket
+
+    def find_free_port(start_port=5001):
+        port = start_port
+        while True:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                try:
+                    s.bind(('127.0.0.1', port))
+                    return port
+                except OSError:
+                    port += 1
+
+    # 空きポートを自動検出
+    free_port = find_free_port(5001)
 
     def open_browser():
         time.sleep(1.5)
-        webbrowser.open('http://127.0.0.1:5001')
+        webbrowser.open(f'http://127.0.0.1:{free_port}')
 
     is_frozen = getattr(sys, 'frozen', False)
     if is_frozen:
         threading.Thread(target=open_browser, daemon=True).start()
 
-    app.run(host='127.0.0.1', port=5001, debug=not is_frozen)
+    app.run(host='127.0.0.1', port=free_port, debug=not is_frozen)
