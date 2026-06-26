@@ -19,6 +19,7 @@ call .\venv\Scripts\pip.exe install pyinstaller pillow Flask
 echo 2. スタンドアローン.exe のビルドを開始...
 :: Windows用のPyInstallerでは --add-data の区切り文字にセミコロン (;) を使用します
 call .\venv\Scripts\pyinstaller.exe --onefile --windowed ^
+  --icon="icon.ico" ^
   --add-data "templates;templates" ^
   --add-data "static;static" ^
   --name "PhotoArranger" ^

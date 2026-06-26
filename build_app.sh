@@ -15,6 +15,7 @@ echo "1. 依存ライブラリのインストール..."
 # --add-data: テンプレートやCSS/JS静的ファイルをバイナリに同梱する
 echo "2. スタンドアローン.appのビルドを開始..."
 ./venv/bin/pyinstaller --onefile --windowed \
+  --icon="icon.icns" \
   --add-data "templates:templates" \
   --add-data "static:static" \
   --name "PhotoArranger" \
