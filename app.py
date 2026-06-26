@@ -3,13 +3,20 @@ import shutil
 import json
 import subprocess
 import signal
+import sys
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, render_template, request, Response, jsonify
 from PIL import Image
 from PIL.ExifTags import TAGS
 
-app = Flask(__name__)
+# PyInstallerのパッケージング時の一時参照先を設定
+if getattr(sys, 'frozen', False):
+    template_folder = os.path.join(sys._MEIPASS, 'templates')
+    static_folder = os.path.join(sys._MEIPASS, 'static')
+    app = Flask(__name__, template_folder=template_folder, static_folder=static_folder)
+else:
+    app = Flask(__name__)
 
 # グローバルなキャンセル要求フラグ
 is_cancelled = False
