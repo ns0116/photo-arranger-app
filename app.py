@@ -6,6 +6,7 @@ import signal
 import sys
 import platform
 import threading
+import hashlib
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, render_template, request, Response, jsonify
@@ -102,6 +103,71 @@ def shutdown():
         return jsonify({'message': 'サーバーをシャットダウンしています...'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+def calculate_sha256(filepath):
+    """ファイルをチャンク毎に読み込み、SHA-256ハッシュ値を計算する（メモリ効率化）"""
+    sha256 = hashlib.sha256()
+    with open(filepath, 'rb') as f:
+        while True:
+            chunk = f.read(65536)  # 64KB chunks
+            if not chunk:
+                break
+            sha256.update(chunk)
+    return sha256.hexdigest()
+
+def safe_copy(src_path, dst_path):
+    """安全なコピー: コピー先に一時ファイルを作成し、ハッシュ検証後にリネーム。失敗時はクリーンアップ"""
+    dst_tmp_path = dst_path + '.tmp'
+    try:
+        shutil.copy2(src_path, dst_tmp_path)
+        
+        src_hash = calculate_sha256(src_path)
+        tmp_hash = calculate_sha256(dst_tmp_path)
+        
+        if src_hash != tmp_hash:
+            raise IOError(f"ハッシュ値が一致しません (src={src_hash}, dst={tmp_hash})")
+            
+        if os.path.exists(dst_path):
+            os.remove(dst_path)
+        os.rename(dst_tmp_path, dst_path)
+        
+    except Exception as e:
+        print(f"[-] safe_copy rollback triggered: {str(e)}", file=sys.stderr)
+        for path in (dst_tmp_path, dst_path):
+            if os.path.exists(path):
+                try:
+                    os.remove(path)
+                except Exception:
+                    pass
+        raise IOError(f"コピー失敗によるロールバック実行: {str(e)}")
+
+def safe_move(src_path, dst_path):
+    """安全な移動: コピー先に一時ファイルを作成し、ハッシュ検証後にリネーム、元ファイルを削除。失敗時はクリーンアップ"""
+    dst_tmp_path = dst_path + '.tmp'
+    try:
+        shutil.copy2(src_path, dst_tmp_path)
+        
+        src_hash = calculate_sha256(src_path)
+        tmp_hash = calculate_sha256(dst_tmp_path)
+        
+        if src_hash != tmp_hash:
+            raise IOError(f"ハッシュ値が一致しません (src={src_hash}, dst={tmp_hash})")
+            
+        if os.path.exists(dst_path):
+            os.remove(dst_path)
+        os.rename(dst_tmp_path, dst_path)
+        
+        os.remove(src_path)
+        
+    except Exception as e:
+        print(f"[-] safe_move rollback triggered: {str(e)}", file=sys.stderr)
+        for path in (dst_tmp_path, dst_path):
+            if os.path.exists(path):
+                try:
+                    os.remove(path)
+                except Exception:
+                    pass
+        raise IOError(f"移動失敗によるロールバック実行: {str(e)}")
 
 def get_exif_date(filepath):
     """画像ファイルからEXIF撮影日時を取得する"""
@@ -251,20 +317,13 @@ def process_file_task(s_dir, filename, dst_dir, date_format, mode, dry_run):
 
         if not is_skip:
             if mode == 'move':
-                # 安全な移動 (コピー後にファイルサイズを検証して削除)
-                # 注意: サイズベースの簡易検証のため、まれなディスクエラーは検出できない場合がある。
-                # より厳密な検証が必要な場合はチェックサム比較（hashlib.sha256等）を推奨する。
-                shutil.copy2(src_path, dst_path)
-                if os.path.exists(dst_path) and os.path.getsize(src_path) == os.path.getsize(dst_path):
-                    os.remove(src_path)
-                    copied = True
-                    action_done = 'move'
-                    log_type = 'success'
-                    message = f"移動成功: {src_dirname}/{filename} -> {folder_name}/{resolved_filename}"
-                else:
-                    raise IOError("移動先ファイルのサイズ不一致。元ファイルを保護するため削除を中止しました。")
+                safe_move(src_path, dst_path)
+                copied = True
+                action_done = 'move'
+                log_type = 'success'
+                message = f"移動成功: {src_dirname}/{filename} -> {folder_name}/{resolved_filename}"
             else:
-                shutil.copy2(src_path, dst_path)
+                safe_copy(src_path, dst_path)
                 copied = True
                 action_done = 'copy'
                 log_type = 'success'

@@ -11,6 +11,9 @@ __pycache__/
 # Test mock directories
 tests/
 
+# Temp files for rollback
+*.tmp
+
 # PyInstaller builds
 build/
 dist/
