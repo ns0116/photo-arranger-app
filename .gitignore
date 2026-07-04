@@ -1,0 +1,31 @@
+# Python Virtual Environment
+venv/
+
+# Python Cache
+__pycache__/
+*.pyc
+
+# OS Files
+.DS_Store
+
+# Test mock directories and caches
+tests/test_src*
+tests/test_dst*
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Temp files for rollback
+*.tmp
+
+# PyInstaller builds
+build/
+dist/
+*.spec
+
+# Claude Code project context (private, not for public repo)
+CLAUDE.md
+.claude/
+
+# Internal AI-agent working docs (not for public repo)
+docs/
