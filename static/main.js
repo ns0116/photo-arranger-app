@@ -1,3 +1,17 @@
+function escapeHtml(str) {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function getCsrfToken() {
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? meta.content : '';
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     // DOM Elements
     const srcDirsContainer = document.getElementById('src-dirs-container');
@@ -54,7 +68,10 @@ document.addEventListener('DOMContentLoaded', () => {
     async function selectDirectory(targetInput) {
         try {
             targetInput.disabled = true;
-            const response = await fetch('/api/select-dir', { method: 'POST' });
+            const response = await fetch('/api/select-dir', {
+                method: 'POST',
+                headers: { 'X-CSRF-Token': getCsrfToken() },
+            });
             const data = await response.json();
             
             if (data.path) {
@@ -128,7 +145,10 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             btnCancel.disabled = true;
             btnCancel.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${currentLang === 'ja' ? '中断中...' : 'Cancelling...'}`;
-            const response = await fetch('/api/cancel', { method: 'POST' });
+            const response = await fetch('/api/cancel', {
+                method: 'POST',
+                headers: { 'X-CSRF-Token': getCsrfToken() },
+            });
             const data = await response.json();
             addLog(data.message, 'info');
         } catch (error) {
@@ -160,7 +180,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             addLog('サーバーのシャットダウン要求を送信しました...', 'error');
-            await fetch('/api/shutdown', { method: 'POST' });
+            await fetch('/api/shutdown', {
+                method: 'POST',
+                headers: { 'X-CSRF-Token': getCsrfToken() },
+            });
             showShutdownScreen();
         } catch (error) {
             showShutdownScreen();
@@ -259,7 +282,10 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const response = await fetch('/api/arrange', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': getCsrfToken(),
+                },
                 body: JSON.stringify({ 
                     src_dirs: srcDirs, 
                     dst_dir: dstDir, 
@@ -442,14 +468,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 ? `${item.folder}/${targetFilename}` 
                 : `${item.folder}/`;
 
+            const fileDisplay = `${escapeHtml(item.src_dir)}/${escapeHtml(item.filename)}`;
+            const destEscaped = escapeHtml(destDisplay);
             row.innerHTML = `
-                <div class="preview-file" title="${item.src_dir}/${item.filename}">
-                    ${item.src_dir}/${item.filename}
+                <div class="preview-file" title="${fileDisplay}">
+                    ${fileDisplay}
                 </div>
                 <div class="preview-details">
-                    <span class="p-badge ${badgeClass}">${badgeText}</span>
+                    <span class="p-badge ${escapeHtml(badgeClass)}">${escapeHtml(badgeText)}</span>
                     <i class="fa-solid fa-arrow-right-long preview-arrow"></i>
-                    <span class="preview-dest-folder" title="${destDisplay}">${destDisplay}</span>
+                    <span class="preview-dest-folder" title="${destEscaped}">${destEscaped}</span>
                 </div>
             `;
             previewList.appendChild(row);
@@ -468,7 +496,10 @@ document.addEventListener('DOMContentLoaded', () => {
             btnUndo.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${currentLang === 'ja' ? '元に戻し中...' : 'Undoing...'}`;
             addLog(currentLang === 'ja' ? 'Undo処理を開始します...' : 'Starting Undo operation...', 'info');
 
-            const response = await fetch('/api/undo', { method: 'POST' });
+            const response = await fetch('/api/undo', {
+                method: 'POST',
+                headers: { 'X-CSRF-Token': getCsrfToken() },
+            });
             const data = await response.json();
 
             if (!response.ok) {

@@ -17,11 +17,12 @@ def app_client(tmp_path):
     Config.DB_FILE = str(test_db)
     Config.LOG_DIR = str(tmp_path)
 
-    app = create_app()
-    app.config["TESTING"] = True
+    flask_app = create_app()
+    flask_app.config["TESTING"] = True
+    csrf_headers = {"X-CSRF-Token": flask_app.config["CSRF_TOKEN"]}
 
-    with app.test_client() as client:
-        yield client
+    with flask_app.test_client() as client:
+        yield client, csrf_headers
 
     Config.DB_FILE = orig_db
     Config.LOG_DIR = orig_dir
@@ -29,6 +30,7 @@ def app_client(tmp_path):
 
 def test_undo_copy_mode(app_client, tmp_path):
     """Tests that rolling back a copy operation deletes target files and empty directories."""
+    client, csrf_headers = app_client
     src_dir = tmp_path / "src"
     dst_dir = tmp_path / "dst"
     src_dir.mkdir()
@@ -39,7 +41,7 @@ def test_undo_copy_mode(app_client, tmp_path):
     test_file.write_bytes(b"image data")
 
     # Perform actual copy arrange
-    response = app_client.post(
+    response = client.post(
         "/api/arrange",
         json={
             "src_dirs": [str(src_dir)],
@@ -48,6 +50,7 @@ def test_undo_copy_mode(app_client, tmp_path):
             "mode": "copy",
             "dry_run": False,
         },
+        headers=csrf_headers,
     )
     assert response.status_code == 200
 
@@ -57,7 +60,7 @@ def test_undo_copy_mode(app_client, tmp_path):
     assert copied_file.exists()
 
     # Trigger Undo
-    undo_resp = app_client.post("/api/undo")
+    undo_resp = client.post("/api/undo", headers=csrf_headers)
     assert undo_resp.status_code == 200
     undo_data = undo_resp.get_json()
     assert "Undoが完了しました" in undo_data["message"]
@@ -72,6 +75,7 @@ def test_undo_copy_mode(app_client, tmp_path):
 
 def test_undo_move_mode(app_client, tmp_path):
     """Tests that rolling back a move operation safely restores files to original paths."""
+    client, csrf_headers = app_client
     src_dir = tmp_path / "src"
     dst_dir = tmp_path / "dst"
     src_dir.mkdir()
@@ -81,7 +85,7 @@ def test_undo_move_mode(app_client, tmp_path):
     test_file.write_bytes(b"image data")
 
     # Perform move arrange
-    response = app_client.post(
+    response = client.post(
         "/api/arrange",
         json={
             "src_dirs": [str(src_dir)],
@@ -90,6 +94,7 @@ def test_undo_move_mode(app_client, tmp_path):
             "mode": "move",
             "dry_run": False,
         },
+        headers=csrf_headers,
     )
     assert response.status_code == 200
 
@@ -99,7 +104,7 @@ def test_undo_move_mode(app_client, tmp_path):
     assert not test_file.exists()  # Source deleted
 
     # Trigger Undo
-    undo_resp = app_client.post("/api/undo")
+    undo_resp = client.post("/api/undo", headers=csrf_headers)
     assert undo_resp.status_code == 200
 
     # Verify moved file returned to source

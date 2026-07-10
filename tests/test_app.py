@@ -11,48 +11,48 @@ def test_index_route(client):
     assert b"Photo Arranger" in response.data
 
 
-def test_select_dir_route(client):
+def test_select_dir_route(client, csrf_headers):
     """Test POST /api/select-dir returns the mocked directory path."""
     with patch("routes.directories.select_dir_dialog") as mock_dialog:
         mock_dialog.return_value = "/mock/selected/folder"
-        response = client.post("/api/select-dir")
+        response = client.post("/api/select-dir", headers=csrf_headers)
         assert response.status_code == 200
         assert response.json == {"path": "/mock/selected/folder"}
 
 
-def test_select_dir_unsupported_os(client):
+def test_select_dir_unsupported_os(client, csrf_headers):
     """Test POST /api/select-dir returns 400 error on unsupported operating systems."""
     with patch("routes.directories.select_dir_dialog") as mock_dialog:
         mock_dialog.side_effect = NotImplementedError()
-        response = client.post("/api/select-dir")
+        response = client.post("/api/select-dir", headers=csrf_headers)
         assert response.status_code == 400
         assert "未対応のOSです" in response.json["error"]
 
 
-def test_cancel_route(client):
+def test_cancel_route(client, csrf_headers):
     """Test POST /api/cancel signals cancellation success."""
-    response = client.post("/api/cancel")
+    response = client.post("/api/cancel", headers=csrf_headers)
     assert response.status_code == 200
     assert "キャンセル" in response.json["message"]
 
 
-def test_shutdown_route(client):
+def test_shutdown_route(client, csrf_headers):
     """Test POST /api/shutdown invokes process shutdown signals."""
     with patch("os.kill") as mock_kill:
-        response = client.post("/api/shutdown")
+        response = client.post("/api/shutdown", headers=csrf_headers)
         assert response.status_code == 200
         assert "シャットダウンしています" in response.json["message"]
         mock_kill.assert_called_once()
 
 
-def test_arrange_route_missing_args(client):
+def test_arrange_route_missing_args(client, csrf_headers):
     """Test POST /api/arrange returns 400 when folders are not provided."""
-    response = client.post("/api/arrange", json={})
+    response = client.post("/api/arrange", json={}, headers=csrf_headers)
     assert response.status_code == 400
     assert "コピー元とコピー先のディレクトリ" in response.json["error"]
 
 
-def test_arrange_route_dry_run(client, temp_workspace, image_creator):
+def test_arrange_route_dry_run(client, csrf_headers, temp_workspace, image_creator):
     """Test POST /api/arrange executes simulation and streams data."""
     src = temp_workspace["src"]
     dst = temp_workspace["dst"]
@@ -67,6 +67,7 @@ def test_arrange_route_dry_run(client, temp_workspace, image_creator):
             "mode": "copy",
             "dry_run": True,
         },
+        headers=csrf_headers,
     )
 
     assert response.status_code == 200

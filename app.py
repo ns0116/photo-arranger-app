@@ -1,5 +1,6 @@
 import logging
 import os
+import secrets
 import socket
 import sys
 import threading
@@ -25,6 +26,9 @@ def create_app(config_class=Config):
 
     # Setup structured logging
     setup_logging(app)
+
+    # Generate a per-process CSRF token for all state-changing endpoints
+    app.config["CSRF_TOKEN"] = secrets.token_hex(32)
 
     # Initialize SQLite database
     from services.db_service import initialize_db

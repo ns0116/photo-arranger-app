@@ -6,7 +6,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
 from config import Config
-from services.file_service import get_non_conflicting_path, safe_copy, safe_move
+from services.file_service import (
+    get_non_conflicting_path,
+    safe_copy,
+    safe_move,
+    validate_path_in_dst,
+)
 from utils.date_utils import get_exif_date
 from utils.i18n import get_txt
 
@@ -172,6 +177,8 @@ def process_file_task(
                 target_rel_path = os.path.join(target_rel_path, filename)
             folder_name = os.path.dirname(target_rel_path)
             target_filename = os.path.basename(target_rel_path)
+
+        validate_path_in_dst(dst_dir, os.path.join(dst_dir, folder_name))
 
         if dry_run:
             folder_path = os.path.join(dst_dir, folder_name)

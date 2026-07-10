@@ -6,6 +6,16 @@ import shutil
 from config import Config
 
 
+def validate_path_in_dst(dst_dir: str, candidate_path: str) -> None:
+    """Raise ValueError if candidate_path is outside dst_dir (path traversal guard)."""
+    dst_real = os.path.realpath(dst_dir)
+    candidate_real = os.path.realpath(candidate_path)
+    if candidate_real != dst_real and not candidate_real.startswith(dst_real + os.sep):
+        raise ValueError(
+            f"パストラバーサルが検出されました: '{candidate_real}' は '{dst_real}' の外にあります"
+        )
+
+
 def calculate_sha256(filepath):
     """Calculates the SHA-256 checksum of a file."""
     sha256 = hashlib.sha256()
@@ -59,6 +69,7 @@ def get_non_conflicting_path(
     by appending '_1', '_2', etc. to the filename, up to MAX_RENAME_ATTEMPTS.
     """
     folder_path = os.path.join(dst_dir, folder_name)
+    validate_path_in_dst(dst_dir, folder_path)
     dst_filepath = os.path.join(folder_path, filename)
 
     # If no file exists at destination, it's a new copy/move
