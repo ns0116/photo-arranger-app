@@ -2,9 +2,23 @@ import logging
 import os
 import signal
 
-from flask import Blueprint, jsonify, render_template
+from flask import Blueprint, abort, current_app, jsonify, render_template, request
 
 system_bp = Blueprint("system", __name__)
+
+
+def _require_localhost():
+    """Abort with 403 if the request is not from localhost."""
+    if request.remote_addr not in ("127.0.0.1", "::1"):
+        abort(403)
+
+
+def _verify_csrf():
+    """Abort with 403 if the X-CSRF-Token header does not match the app token."""
+    token = request.headers.get("X-CSRF-Token", "")
+    expected = current_app.config.get("CSRF_TOKEN", "")
+    if not token or token != expected:
+        abort(403)
 
 
 @system_bp.route("/")
@@ -16,6 +30,8 @@ def index():
 @system_bp.route("/api/shutdown", methods=["POST"])
 def shutdown():
     """Gracefully terminates the Flask server process using SIGINT."""
+    _require_localhost()
+    _verify_csrf()
     try:
         logging.info("Shutdown requested from client. Terminating process...")
         os.kill(os.getpid(), signal.SIGINT)
@@ -42,6 +58,8 @@ def clean_parent_folders(path):
 @system_bp.route("/api/undo", methods=["POST"])
 def undo():
     """Rollbacks the file operations of the latest active session."""
+    _require_localhost()
+    _verify_csrf()
     from services.db_service import (
         get_latest_session,
         get_session_history,

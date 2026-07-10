@@ -45,6 +45,12 @@ def client(app):
 
 
 @pytest.fixture
+def csrf_headers(app):
+    """Provides the CSRF token header dict for POST requests."""
+    return {"X-CSRF-Token": app.config["CSRF_TOKEN"]}
+
+
+@pytest.fixture
 def temp_workspace(tmp_path):
     """Provides temporary source and destination directories for tests."""
     src_dir = tmp_path / "src"

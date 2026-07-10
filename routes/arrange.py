@@ -1,15 +1,23 @@
 import os
 
-from flask import Blueprint, Response, jsonify, request
+from flask import Blueprint, Response, abort, current_app, jsonify, request
 
 from services.photo_service import arrange_photos, cancel_event
 
 arrange_bp = Blueprint("arrange", __name__)
 
 
+def _verify_csrf():
+    token = request.headers.get("X-CSRF-Token", "")
+    expected = current_app.config.get("CSRF_TOKEN", "")
+    if not token or token != expected:
+        abort(403)
+
+
 @arrange_bp.route("/api/arrange", methods=["POST"])
 def arrange():
     """Start the photo arrangement process and stream progress via SSE."""
+    _verify_csrf()
     data = request.json or {}
     src_dirs = data.get("src_dirs")
     dst_dir = data.get("dst_dir")
@@ -61,5 +69,6 @@ def arrange():
 @arrange_bp.route("/api/cancel", methods=["POST"])
 def cancel():
     """Cancel the ongoing arrangement process."""
+    _verify_csrf()
     cancel_event.set()
     return jsonify({"message": "キャンセルシグナルを送信しました。"})
