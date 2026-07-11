@@ -28,15 +28,18 @@ def initialize_db():
     """Initializes the database schema if tables do not exist."""
     with db_session() as conn:
         conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("""
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS sessions (
                 session_id TEXT PRIMARY KEY,
                 timestamp TEXT NOT NULL,
                 mode TEXT NOT NULL,
                 status TEXT NOT NULL
             )
-        """)
-        conn.execute("""
+        """
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS file_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_id TEXT NOT NULL,
@@ -48,7 +51,8 @@ def initialize_db():
                 status TEXT NOT NULL,
                 FOREIGN KEY(session_id) REFERENCES sessions(session_id)
             )
-        """)
+        """
+        )
         try:
             conn.execute("ALTER TABLE sessions ADD COLUMN dst_dir TEXT")
         except Exception:
