@@ -52,15 +52,19 @@ def initialize_db():
             )
         """
         )
+        try:
+            conn.execute("ALTER TABLE sessions ADD COLUMN dst_dir TEXT")
+        except Exception:
+            pass  # Column already exists
     logging.info("SQLite database initialized successfully.")
 
 
-def register_session(session_id, mode):
+def register_session(session_id, mode, dst_dir=None):
     """Registers a new arrangement session in the database."""
     with db_session() as conn:
         conn.execute(
-            "INSERT INTO sessions (session_id, timestamp, mode, status) VALUES (?, ?, ?, ?)",
-            (session_id, datetime.now().isoformat(), mode, "active"),
+            "INSERT INTO sessions (session_id, timestamp, mode, status, dst_dir) VALUES (?, ?, ?, ?, ?)",
+            (session_id, datetime.now().isoformat(), mode, "active", dst_dir),
         )
     logging.info(f"Registered session {session_id} in mode={mode}.")
 
@@ -109,7 +113,7 @@ def get_latest_session():
     """Retrieves the most recent active session from database."""
     with db_session() as conn:
         cursor = conn.execute(
-            "SELECT session_id, mode, status FROM sessions ORDER BY timestamp DESC LIMIT 1"
+            "SELECT session_id, mode, status, dst_dir FROM sessions ORDER BY timestamp DESC LIMIT 1"
         )
         row = cursor.fetchone()
         return dict(row) if row else None

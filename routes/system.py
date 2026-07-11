@@ -41,11 +41,15 @@ def shutdown():
         return jsonify({"error": str(e)}), 500
 
 
-def clean_parent_folders(path):
-    """Recursively removes empty parent directories starting from the file path."""
+def clean_parent_folders(path, dst_dir=None):
+    """Recursively removes empty parent directories up to dst_dir boundary."""
+    dst_real = os.path.realpath(dst_dir) if dst_dir else None
     current = os.path.dirname(path)
     while current:
         try:
+            current_real = os.path.realpath(current)
+            if dst_real is not None and not current_real.startswith(dst_real + os.sep):
+                break
             if os.path.exists(current) and not os.listdir(current):
                 os.rmdir(current)
                 current = os.path.dirname(current)
@@ -77,6 +81,7 @@ def undo():
 
         session_id = session["session_id"]
         mode = session["mode"]
+        dst_dir = session.get("dst_dir")
         history = get_session_history(session_id)
 
         undone_count = 0
@@ -117,8 +122,8 @@ def undo():
                             f"削除失敗 (コピー先ファイルが見つかりません): {os.path.basename(org_path)}"
                         )
 
-                # Clean empty parent folders
-                clean_parent_folders(org_path)
+                # Clean empty parent folders up to dst_dir boundary
+                clean_parent_folders(org_path, dst_dir)
 
             except Exception as e:
                 error_count += 1

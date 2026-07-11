@@ -312,6 +312,22 @@ def process_file_task(
                     )
                 except Exception as db_err:
                     logging.error(f"Failed to log file action: {db_err}")
+                    return {
+                        "status": "db_error",
+                        "filename": filename,
+                        "src_dir": src_dirname,
+                        "folder": folder_name,
+                        "action": action_done,
+                        "copied": copied,
+                        "message": get_txt(
+                            lang,
+                            "process_error",
+                            dir=src_dirname,
+                            file=filename,
+                            error=f"DB記録失敗 (Undoが無効): {db_err}",
+                        ),
+                        "log_type": "error",
+                    }
         else:
             message = get_txt(
                 lang,
@@ -375,7 +391,7 @@ def arrange_photos(
             from services.db_service import register_session
 
             session_id = uuid.uuid4().hex
-            register_session(session_id, mode)
+            register_session(session_id, mode, dst_dir)
         except Exception as db_err:
             logging.error(f"Failed to register session: {db_err}")
 
@@ -392,7 +408,7 @@ def arrange_photos(
             err_msg = get_txt(lang, "scan_error", dir=d, error=str(e))
             logging.error(err_msg)
             yield f"data: {json.dumps({'status': 'error', 'message': err_msg, 'log_type': 'error'}, ensure_ascii=False)}\n\n"
-            return
+            continue
 
     total_files = len(files_to_process)
     if total_files == 0:
@@ -469,6 +485,13 @@ def arrange_photos(
                     error_count += 1
 
                 logging.info(res["message"])
+            elif res["status"] == "db_error":
+                # File was processed but DB logging failed — Undo will not cover this file
+                act = res.get("action")
+                if act in ("copy", "move", "rename", "rename_move"):
+                    copied_count += 1
+                error_count += 1
+                logging.error(res["message"])
             else:
                 error_count += 1
                 logging.error(res["message"])
