@@ -24,42 +24,44 @@ def scan_directories(src_dirs, extensions=None, date_start=None, date_end=None):
 
     Filters files by extension and date range if provided.
     Skips hidden files (starting with dot) and directories.
+    When date filtering is active, EXIF reads are parallelized across a thread pool.
     """
-    files_to_process = []
+    ext_set = (
+        {e.lower() for e in extensions} if extensions else set(Config.IMAGE_EXTENSIONS)
+    )
+    candidates = []
+
     for d in src_dirs:
         if not os.path.isdir(d):
             raise FileNotFoundError(f"Source directory does not exist: {d}")
 
-        dir_files = [f for f in os.listdir(d) if os.path.isfile(os.path.join(d, f))]
-        dir_files = [f for f in dir_files if not f.startswith(".")]
-        for f in dir_files:
+        for f in os.listdir(d):
             filepath = os.path.join(d, f)
-            ext = os.path.splitext(f)[1].lower()
+            if not os.path.isfile(filepath) or f.startswith("."):
+                continue
+            if os.path.splitext(f)[1].lower() not in ext_set:
+                continue
+            candidates.append((d, f, filepath))
 
-            # 1. Filter by extension
-            if extensions:
-                if ext not in [e.lower() for e in extensions]:
-                    continue
-            else:
-                if ext not in Config.IMAGE_EXTENSIONS:
-                    continue
+    if not (date_start or date_end):
+        return [(d, f) for d, f, _ in candidates]
 
-            # 2. Filter by date range
-            if date_start or date_end:
-                dt = get_exif_date(filepath)
-                if not dt:
-                    mtime = os.path.getmtime(filepath)
-                    dt = datetime.fromtimestamp(mtime)
+    def _check_date(args):
+        d, f, filepath = args
+        dt = get_exif_date(filepath)
+        if not dt:
+            dt = datetime.fromtimestamp(os.path.getmtime(filepath))
+        date_str = dt.strftime("%Y-%m-%d")
+        if date_start and date_str < date_start:
+            return None
+        if date_end and date_str > date_end:
+            return None
+        return (d, f)
 
-                file_date_str = dt.strftime("%Y-%m-%d")
-                if date_start and file_date_str < date_start:
-                    continue
-                if date_end and file_date_str > date_end:
-                    continue
+    with ThreadPoolExecutor() as pool:
+        results = pool.map(_check_date, candidates)
 
-            files_to_process.append((d, f))
-
-    return files_to_process
+    return [r for r in results if r is not None]
 
 
 def check_db_duplicate(src_path):
@@ -155,6 +157,14 @@ def process_file_task(
             }
     except Exception as db_err:
         logging.error(f"Error in DB duplicate check: {db_err}")
+
+    if local_cancel_event.is_set():
+        return {
+            "status": "cancelled",
+            "filename": filename,
+            "src_dir": os.path.basename(s_dir),
+            "log_type": "error",
+        }
 
     try:
         # EXIF優先、なければ更新日時
@@ -255,6 +265,14 @@ def process_file_task(
                     action, f"Planned: {src_dirname}/{filename} -> {folder_name}/"
                 ),
                 "log_type": log_type_map.get(action, "info"),
+            }
+
+        if local_cancel_event.is_set():
+            return {
+                "status": "cancelled",
+                "filename": filename,
+                "src_dir": os.path.basename(s_dir),
+                "log_type": "error",
             }
 
         # 実際の処理 (Copy または Move)

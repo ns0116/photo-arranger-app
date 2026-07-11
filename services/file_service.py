@@ -105,6 +105,17 @@ def get_non_conflicting_path(
     )
 
 
+def _stream_copy(src_path, dst_tmp_path):
+    """Copies src to dst_tmp in 64 KiB chunks, computing the src SHA-256 in one pass."""
+    hasher = hashlib.sha256()
+    with open(src_path, "rb") as f_in, open(dst_tmp_path, "wb") as f_out:
+        for chunk in iter(lambda: f_in.read(65536), b""):
+            hasher.update(chunk)
+            f_out.write(chunk)
+    shutil.copystat(src_path, dst_tmp_path)
+    return hasher.hexdigest()
+
+
 def safe_copy(src_path, dst_path):
     """安全なコピー: コピー先に一時ファイルを作成し、ハッシュ検証後にリネーム。失敗時はクリーンアップ"""
     dst_dir = os.path.dirname(dst_path)
@@ -113,9 +124,7 @@ def safe_copy(src_path, dst_path):
 
     dst_tmp_path = dst_path + ".tmp"
     try:
-        shutil.copy2(src_path, dst_tmp_path)
-
-        src_hash = calculate_sha256(src_path)
+        src_hash = _stream_copy(src_path, dst_tmp_path)
         tmp_hash = calculate_sha256(dst_tmp_path)
 
         if src_hash != tmp_hash:
@@ -145,9 +154,7 @@ def safe_move(src_path, dst_path):
 
     dst_tmp_path = dst_path + ".tmp"
     try:
-        shutil.copy2(src_path, dst_tmp_path)
-
-        src_hash = calculate_sha256(src_path)
+        src_hash = _stream_copy(src_path, dst_tmp_path)
         tmp_hash = calculate_sha256(dst_tmp_path)
 
         if src_hash != tmp_hash:

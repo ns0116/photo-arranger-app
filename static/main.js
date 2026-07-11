@@ -12,6 +12,63 @@ function getCsrfToken() {
     return meta ? meta.content : '';
 }
 
+function showAlert(message) {
+    return new Promise(resolve => {
+        const overlay = document.getElementById('app-modal');
+        const msgEl = document.getElementById('modal-message');
+        const okBtn = document.getElementById('modal-ok');
+        const cancelBtn = document.getElementById('modal-cancel');
+        msgEl.textContent = message;
+        cancelBtn.classList.add('hidden');
+        overlay.classList.remove('hidden');
+        const done = () => { overlay.classList.add('hidden'); okBtn.removeEventListener('click', done); resolve(); };
+        okBtn.addEventListener('click', done);
+    });
+}
+
+function showConfirm(message, cancelLabel) {
+    return new Promise(resolve => {
+        const overlay = document.getElementById('app-modal');
+        const msgEl = document.getElementById('modal-message');
+        const okBtn = document.getElementById('modal-ok');
+        const cancelBtn = document.getElementById('modal-cancel');
+        msgEl.textContent = message;
+        cancelBtn.textContent = cancelLabel || 'キャンセル';
+        cancelBtn.classList.remove('hidden');
+        overlay.classList.remove('hidden');
+        const onOk = () => { cleanup(); resolve(true); };
+        const onCancel = () => { cleanup(); resolve(false); };
+        const cleanup = () => {
+            overlay.classList.add('hidden');
+            okBtn.removeEventListener('click', onOk);
+            cancelBtn.removeEventListener('click', onCancel);
+        };
+        okBtn.addEventListener('click', onOk);
+        cancelBtn.addEventListener('click', onCancel);
+    });
+}
+
+const STORAGE_KEY = 'photoArrangerSettings';
+
+function saveSettings() {
+    const srcDirInputs = document.querySelectorAll('.src-dir-input');
+    const srcDirs = Array.from(srcDirInputs).map(i => i.value);
+    const dstDir = document.getElementById('dst-dir') ? document.getElementById('dst-dir').value : '';
+    const namingRule = document.getElementById('naming-rule') ? document.getElementById('naming-rule').value : '';
+    const customTemplate = document.getElementById('custom-template') ? document.getElementById('custom-template').value : '';
+    const extCheckboxes = document.querySelectorAll('input[name="extensions"]');
+    const extensions = Array.from(extCheckboxes).filter(cb => cb.checked).map(cb => cb.value);
+    const dateStart = document.getElementById('date-start') ? document.getElementById('date-start').value : '';
+    const dateEnd = document.getElementById('date-end') ? document.getElementById('date-end').value : '';
+    const modeEl = document.querySelector('.toggle-option.active');
+    const mode = modeEl ? modeEl.getAttribute('data-value') : 'copy';
+    try {
+        const lang = document.querySelector('.lang-option.active');
+        const language = lang ? (lang.id === 'btn-lang-en' ? 'en' : 'ja') : 'ja';
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ srcDirs, dstDir, namingRule, customTemplate, extensions, dateStart, dateEnd, mode, language }));
+    } catch (e) { /* storage unavailable */ }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     // DOM Elements
     const srcDirsContainer = document.getElementById('src-dirs-container');
@@ -58,9 +115,8 @@ document.addEventListener('DOMContentLoaded', () => {
             toggleOptions.forEach(opt => opt.classList.remove('active'));
             option.classList.add('active');
             selectedMode = option.getAttribute('data-value');
-            
-            // UIラベル更新
             updateStatsLabels();
+            saveSettings();
         });
     });
 
@@ -76,6 +132,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (data.path) {
                 targetInput.value = data.path;
+                saveSettings();
             } else if (data.error) {
                 addLog(`フォルダ選択エラー: ${data.error}`, 'error');
             }
@@ -102,6 +159,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (row) {
                 row.remove();
                 updateRemoveButtonsVisibility();
+                saveSettings();
             }
         }
     });
@@ -134,6 +192,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     btnSelectDst.addEventListener('click', () => selectDirectory(dstDirInput));
+    dstDirInput.addEventListener('change', saveSettings);
+    srcDirsContainer.addEventListener('change', saveSettings);
+    document.getElementById('naming-rule').addEventListener('change', saveSettings);
+    document.getElementById('custom-template').addEventListener('input', saveSettings);
+    document.querySelectorAll('input[name="extensions"]').forEach(cb => cb.addEventListener('change', saveSettings));
+    document.getElementById('date-start').addEventListener('change', saveSettings);
+    document.getElementById('date-end').addEventListener('change', saveSettings);
 
     // Clear logs
     btnClearLog.addEventListener('click', () => {
@@ -174,7 +239,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Shutdown backend server
     btnShutdown.addEventListener('click', async () => {
         const confirmMsg = uiStrings[currentLang]['shutdown-confirm'];
-        if (!confirm(confirmMsg)) {
+        const cancelLbl = currentLang === 'ja' ? 'キャンセル' : 'Cancel';
+        if (!await showConfirm(confirmMsg, cancelLbl)) {
             return;
         }
 
@@ -226,7 +292,7 @@ document.addEventListener('DOMContentLoaded', () => {
             : namingRuleSelect.value;
 
         if (srcDirs.length === 0 || !dstDir) {
-            alert(uiStrings[currentLang]['error-select-dirs']);
+            await showAlert(uiStrings[currentLang]['error-select-dirs']);
             return;
         }
 
@@ -342,7 +408,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (error) {
             addLog(`処理失敗: ${error.message}`, 'error');
-            alert(`エラーが発生しました: ${error.message}`);
+            await showAlert(`エラーが発生しました: ${error.message}`);
         } finally {
             setControlsDisabled(false);
             btnCancel.classList.add('hidden');
@@ -489,7 +555,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const confirmMsg = currentLang === 'ja'
             ? '最新の整理セッションを元に戻しますか？（コピーされたファイルは削除され、移動されたファイルは元のフォルダに戻ります）'
             : 'Rollback the latest session? (Copied files will be deleted, and moved files will be returned to their original folders)';
-        if (!confirm(confirmMsg)) return;
+        if (!await showConfirm(confirmMsg, currentLang === 'ja' ? 'キャンセル' : 'Cancel')) return;
 
         try {
             btnUndo.disabled = true;
@@ -510,12 +576,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (data.logs && data.logs.length > 0) {
                 data.logs.forEach(log => addLog(log, 'info'));
             }
-            alert(data.message);
+            await showAlert(data.message);
             btnUndo.classList.add('hidden'); // Hide undo button after rollback succeeds
         } catch (error) {
             console.error('Undo request failed:', error);
             addLog(`${currentLang === 'ja' ? 'Undo失敗' : 'Undo failed'}: ${error.message}`, 'error');
-            alert(`${currentLang === 'ja' ? 'Undoエラー' : 'Undo error'}: ${error.message}`);
+            await showAlert(`${currentLang === 'ja' ? 'Undoエラー' : 'Undo error'}: ${error.message}`);
         } finally {
             btnUndo.disabled = false;
             btnUndo.innerHTML = `<i class="fa-solid fa-rotate-left"></i> ${uiStrings[currentLang]['lbl-undo']}`;
@@ -680,6 +746,66 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    btnLangJa.addEventListener('click', () => setLanguage('ja'));
-    btnLangEn.addEventListener('click', () => setLanguage('en'));
+    btnLangJa.addEventListener('click', () => { setLanguage('ja'); saveSettings(); });
+    btnLangEn.addEventListener('click', () => { setLanguage('en'); saveSettings(); });
+
+    function loadSettings() {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (!raw) return;
+            const s = JSON.parse(raw);
+
+            // Restore language first so placeholders render correctly
+            if (s.language) setLanguage(s.language);
+
+            // Restore source directories
+            if (Array.isArray(s.srcDirs) && s.srcDirs.length > 0) {
+                const rows = srcDirsContainer.querySelectorAll('.src-dir-row');
+                s.srcDirs.forEach((dir, idx) => {
+                    if (idx === 0) {
+                        const input = rows[0] && rows[0].querySelector('.src-dir-input');
+                        if (input) input.value = dir;
+                    } else if (dir) {
+                        btnAddSrc.click();
+                        const allRows = srcDirsContainer.querySelectorAll('.src-dir-row');
+                        const input = allRows[allRows.length - 1].querySelector('.src-dir-input');
+                        if (input) input.value = dir;
+                    }
+                });
+            }
+
+            if (s.dstDir) dstDirInput.value = s.dstDir;
+
+            if (s.namingRule) {
+                const select = document.getElementById('naming-rule');
+                select.value = s.namingRule;
+                const customGroup = document.getElementById('custom-template-group');
+                if (s.namingRule === 'custom') {
+                    customGroup.classList.remove('hidden');
+                    if (s.customTemplate) document.getElementById('custom-template').value = s.customTemplate;
+                } else {
+                    customGroup.classList.add('hidden');
+                }
+            }
+
+            if (s.mode) {
+                toggleOptions.forEach(opt => {
+                    if (opt.getAttribute('data-value') === s.mode) {
+                        opt.click();
+                    }
+                });
+            }
+
+            if (Array.isArray(s.extensions)) {
+                document.querySelectorAll('input[name="extensions"]').forEach(cb => {
+                    cb.checked = s.extensions.includes(cb.value);
+                });
+            }
+
+            if (s.dateStart) document.getElementById('date-start').value = s.dateStart;
+            if (s.dateEnd) document.getElementById('date-end').value = s.dateEnd;
+        } catch (e) { /* corrupt storage — ignore */ }
+    }
+
+    loadSettings();
 });

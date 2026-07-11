@@ -27,6 +27,7 @@ def db_session():
 def initialize_db():
     """Initializes the database schema if tables do not exist."""
     with db_session() as conn:
+        conn.execute("PRAGMA journal_mode=WAL")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS sessions (
