@@ -7,6 +7,7 @@ import pytest
 
 from config import Config
 from services.file_service import (
+    _stream_copy,
     are_files_identical_optimized,
     calculate_sha256,
     get_non_conflicting_path,
@@ -44,9 +45,10 @@ def test_safe_copy_hash_mismatch(temp_workspace, image_creator):
     dst = os.path.join(temp_workspace["dst"], "dest.jpg")
     image_creator(src, content=b"content-a")
 
-    with patch("services.file_service.calculate_sha256") as mock_hash:
-        # Mock returns different hashes for source and destination to simulate corruption
-        mock_hash.side_effect = ["hash-src", "hash-dst-corrupted"]
+    # _stream_copy returns src hash; calculate_sha256 returns dst hash — simulate mismatch
+    with patch("services.file_service._stream_copy", return_value="hash-src"), patch(
+        "services.file_service.calculate_sha256", return_value="hash-dst-corrupted"
+    ):
         with pytest.raises(IOError):
             safe_copy(src, dst)
 
@@ -72,8 +74,9 @@ def test_safe_move_failure(temp_workspace, image_creator):
     dst = os.path.join(temp_workspace["dst"], "dest.jpg")
     image_creator(src, content=b"content-a")
 
-    with patch("services.file_service.calculate_sha256") as mock_hash:
-        mock_hash.side_effect = ["hash-src", "hash-dst-corrupted"]
+    with patch("services.file_service._stream_copy", return_value="hash-src"), patch(
+        "services.file_service.calculate_sha256", return_value="hash-dst-corrupted"
+    ):
         with pytest.raises(IOError):
             safe_move(src, dst)
 
