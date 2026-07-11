@@ -241,6 +241,17 @@
         </footer>
     </div>
 
+    <!-- Styled modal (replaces native alert/confirm) -->
+    <div id="app-modal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+        <div class="modal-box">
+            <p id="modal-message" class="modal-message"></p>
+            <div class="modal-actions">
+                <button id="modal-ok" class="btn btn-primary">OK</button>
+                <button id="modal-cancel" class="btn btn-secondary hidden">キャンセル</button>
+            </div>
+        </div>
+    </div>
+
     <script src="/static/main.js"></script>
 </body>
 </html>
