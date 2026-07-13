@@ -19,7 +19,9 @@ from utils.i18n import get_txt
 cancel_event = threading.Event()
 
 
-def scan_directories(src_dirs, extensions=None, date_start=None, date_end=None, recursive=False):
+def scan_directories(
+    src_dirs, extensions=None, date_start=None, date_end=None, recursive=False
+):
     """Scans all source directories and collects a list of file paths.
 
     Filters files by extension and date range if provided.
@@ -126,7 +128,9 @@ def check_memory_duplicate(src_path, size_map):
     return None
 
 
-def _log_file_action_safe(session_id, src_path, dst_path, size, sha, mtime_val, db_write_lock):
+def _log_file_action_safe(
+    session_id, src_path, dst_path, size, sha, mtime_val, db_write_lock
+):
     """Calls log_file_action under a lock to serialise concurrent thread writes to SQLite."""
     from services.db_service import log_file_action
 
@@ -177,9 +181,7 @@ def process_file_task(
     # 1. Duplicate check using in-memory hash map (avoids per-thread DB connections)
     try:
         duplicate_path = (
-            check_memory_duplicate(src_path, size_map)
-            if size_map is not None
-            else None
+            check_memory_duplicate(src_path, size_map) if size_map is not None else None
         )
         if duplicate_path:
             return {
@@ -371,7 +373,13 @@ def process_file_task(
             if session_id and db_write_lock is not None:
                 try:
                     _log_file_action_safe(
-                        session_id, src_path, dst_path, dst_size, file_hash, mtime_val, db_write_lock
+                        session_id,
+                        src_path,
+                        dst_path,
+                        dst_size,
+                        file_hash,
+                        mtime_val,
+                        db_write_lock,
                     )
                 except Exception as db_err:
                     logging.error(f"Failed to log file action: {db_err}")

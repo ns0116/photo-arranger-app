@@ -74,8 +74,9 @@ def test_safe_move_failure(temp_workspace, image_creator):
     image_creator(src, content=b"content-a")
 
     # Simulate cross-device rename failure followed by stream-copy error
-    with patch("services.file_service.os.rename", side_effect=OSError("cross-device")), \
-         patch("services.file_service._stream_copy", side_effect=IOError("disk full")):
+    with patch(
+        "services.file_service.os.rename", side_effect=OSError("cross-device")
+    ), patch("services.file_service._stream_copy", side_effect=IOError("disk full")):
         with pytest.raises(IOError):
             safe_move(src, dst)
 
