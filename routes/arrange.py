@@ -28,6 +28,7 @@ def arrange():
     date_start = data.get("date_start")
     date_end = data.get("date_end")
     lang = data.get("lang", "ja")
+    recursive = bool(data.get("recursive", False))
 
     # Fallback to single src_dir for compatibility
     if not src_dirs and data.get("src_dir"):
@@ -61,6 +62,7 @@ def arrange():
             date_start=date_start,
             date_end=date_end,
             lang=lang,
+            recursive=recursive,
         ),
         mimetype="text/event-stream",
     )

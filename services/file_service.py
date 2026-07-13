@@ -26,14 +26,15 @@ def calculate_sha256(filepath):
 
 
 def are_files_identical_optimized(src_path, dst_path, optimize=True):
-    """Checks if two files are identical using size, mtime, and SHA-256.
+    """Checks if two files are identical using size then SHA-256.
 
-    If optimize is True, performs a 2-stage verification:
-    - Stage 1: Fast-check size. If sizes differ, they are different (return False).
-    - Stage 2: Check if mtimes also match. If optimization is enabled and mtimes differ,
-      assumes they are different (to avoid expensive hashing).
-      If they match in size and mtime (or optimization is disabled), computes
-      and compares SHA-256 hashes to guarantee identity.
+    Stage 1: Fast-check size. If sizes differ, they are different (return False).
+    Stage 2: Compute and compare SHA-256 hashes as the authoritative identity check.
+
+    The ``optimize`` parameter is retained for API compatibility. mtime is NOT used
+    as a signal for difference — files copied from external storage or cloud services
+    often have reset or shifted mtimes despite identical content, so using mtime to
+    conclude "different" was incorrect (Issue #20).
     """
     if not os.path.exists(dst_path):
         return False
@@ -44,14 +45,6 @@ def are_files_identical_optimized(src_path, dst_path, optimize=True):
         if src_size != dst_size:
             return False
 
-        if optimize:
-            src_mtime = os.path.getmtime(src_path)
-            dst_mtime = os.path.getmtime(dst_path)
-            # 1-second tolerance for floating-point differences
-            if abs(src_mtime - dst_mtime) > 1.0:
-                return False
-
-        # Compare SHA-256 hashes
         return calculate_sha256(src_path) == calculate_sha256(dst_path)
     except Exception as e:
         logging.error(f"Error comparing files {src_path} and {dst_path}: {e}")
@@ -106,7 +99,12 @@ def get_non_conflicting_path(
 
 
 def _stream_copy(src_path, dst_tmp_path):
-    """Copies src to dst_tmp in 64 KiB chunks, computing the src SHA-256 in one pass."""
+    """Copies src to dst_tmp in 64 KiB chunks, computing the src SHA-256 in one pass.
+
+    The hash is computed over the data read from src. Any write error (disk full,
+    I/O fault) surfaces as an exception, so no separate re-read of the destination
+    is needed to verify integrity.
+    """
     hasher = hashlib.sha256()
     with open(src_path, "rb") as f_in, open(dst_tmp_path, "wb") as f_out:
         for chunk in iter(lambda: f_in.read(65536), b""):
@@ -117,7 +115,10 @@ def _stream_copy(src_path, dst_tmp_path):
 
 
 def safe_copy(src_path, dst_path):
-    """安全なコピー: コピー先に一時ファイルを作成し、ハッシュ検証後にリネーム。失敗時はクリーンアップ"""
+    """安全なコピー: コピー先に一時ファイルを作成し、アトミックリネーム。失敗時はクリーンアップ。
+
+    Returns the SHA-256 hex digest of the copied data.
+    """
     dst_dir = os.path.dirname(dst_path)
     if dst_dir:
         os.makedirs(dst_dir, exist_ok=True)
@@ -125,15 +126,10 @@ def safe_copy(src_path, dst_path):
     dst_tmp_path = dst_path + ".tmp"
     try:
         src_hash = _stream_copy(src_path, dst_tmp_path)
-        tmp_hash = calculate_sha256(dst_tmp_path)
-
-        if src_hash != tmp_hash:
-            raise IOError(f"ハッシュ値が一致しません (src={src_hash}, dst={tmp_hash})")
-
         if os.path.exists(dst_path):
             os.remove(dst_path)
         os.rename(dst_tmp_path, dst_path)
-        return True
+        return src_hash
 
     except Exception as e:
         logging.error(f"safe_copy rollback triggered: {str(e)}")
@@ -147,25 +143,29 @@ def safe_copy(src_path, dst_path):
 
 
 def safe_move(src_path, dst_path):
-    """安全な移動: コピー先に一時ファイルを作成し、ハッシュ検証後にリネーム、元ファイルを削除。失敗時はクリーンアップ"""
+    """安全な移動: 同一ボリュームなら os.rename で即時移動、異なるボリュームはコピー後に削除。失敗時はクリーンアップ。
+
+    Returns the SHA-256 hex digest of the moved data.
+    """
     dst_dir = os.path.dirname(dst_path)
     if dst_dir:
         os.makedirs(dst_dir, exist_ok=True)
 
+    # Fast path: same-volume atomic rename (no data copy, preserves all metadata)
+    try:
+        os.rename(src_path, dst_path)
+        return calculate_sha256(dst_path)
+    except OSError:
+        pass  # Cross-device move — fall through to stream-copy approach
+
     dst_tmp_path = dst_path + ".tmp"
     try:
         src_hash = _stream_copy(src_path, dst_tmp_path)
-        tmp_hash = calculate_sha256(dst_tmp_path)
-
-        if src_hash != tmp_hash:
-            raise IOError(f"ハッシュ値が一致しません (src={src_hash}, dst={tmp_hash})")
-
         if os.path.exists(dst_path):
             os.remove(dst_path)
         os.rename(dst_tmp_path, dst_path)
-
         os.remove(src_path)
-        return True
+        return src_hash
 
     except Exception as e:
         logging.error(f"safe_move rollback triggered: {str(e)}")
