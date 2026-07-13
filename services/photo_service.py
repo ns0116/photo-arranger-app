@@ -19,11 +19,14 @@ from utils.i18n import get_txt
 cancel_event = threading.Event()
 
 
-def scan_directories(src_dirs, extensions=None, date_start=None, date_end=None):
+def scan_directories(
+    src_dirs, extensions=None, date_start=None, date_end=None, recursive=False
+):
     """Scans all source directories and collects a list of file paths.
 
     Filters files by extension and date range if provided.
     Skips hidden files (starting with dot) and directories.
+    When recursive=True, subdirectories are traversed with os.walk.
     When date filtering is active, EXIF reads are parallelized across a thread pool.
     """
     ext_set = (
@@ -35,13 +38,26 @@ def scan_directories(src_dirs, extensions=None, date_start=None, date_end=None):
         if not os.path.isdir(d):
             raise FileNotFoundError(f"Source directory does not exist: {d}")
 
-        for f in os.listdir(d):
-            filepath = os.path.join(d, f)
-            if not os.path.isfile(filepath) or f.startswith("."):
-                continue
-            if os.path.splitext(f)[1].lower() not in ext_set:
-                continue
-            candidates.append((d, f, filepath))
+        if recursive:
+            for root, dirs, files in os.walk(d):
+                # Skip hidden directories in-place so os.walk doesn't descend into them
+                dirs[:] = [sub for sub in dirs if not sub.startswith(".")]
+                for f in files:
+                    if f.startswith("."):
+                        continue
+                    if os.path.splitext(f)[1].lower() not in ext_set:
+                        continue
+                    filepath = os.path.join(root, f)
+                    if not os.path.isfile(filepath):
+                        continue
+                    candidates.append((root, f, filepath))
+        else:
+            for entry in os.scandir(d):
+                if not entry.is_file() or entry.name.startswith("."):
+                    continue
+                if os.path.splitext(entry.name)[1].lower() not in ext_set:
+                    continue
+                candidates.append((d, entry.name, entry.path))
 
     if not (date_start or date_end):
         return [(d, f) for d, f, _ in candidates]
@@ -64,38 +80,62 @@ def scan_directories(src_dirs, extensions=None, date_start=None, date_end=None):
     return [r for r in results if r is not None]
 
 
-def check_db_duplicate(src_path):
-    """Checks if a file with the same size/hash is already in the database.
+def load_memory_hashes():
+    """Loads all active file records from the DB into an in-memory dict.
 
-    Uses size-filtering to avoid calculating SHA-256 for unique files.
+    Returns a dict keyed by file_size mapping to a list of (sha256, organized_path)
+    tuples. This allows worker threads to do duplicate detection without opening
+    per-file DB connections.
+    """
+    from services.db_service import db_session
+
+    size_map = {}
+    try:
+        with db_session() as conn:
+            cursor = conn.execute(
+                "SELECT file_size, sha256, organized_path FROM file_history WHERE status = 'active'"
+            )
+            for row in cursor.fetchall():
+                size_map.setdefault(row["file_size"], []).append(
+                    (row["sha256"], row["organized_path"])
+                )
+    except Exception as e:
+        logging.warning(f"Failed to preload DB hashes (duplicate check disabled): {e}")
+    return size_map
+
+
+def check_memory_duplicate(src_path, size_map):
+    """Checks if a file matches an already-organized file using the in-memory size_map.
+
+    Avoids computing SHA-256 entirely when no size match exists.
+    Returns the existing organized_path if a duplicate is found, else None.
     """
     try:
-        from services.db_service import db_session
         from services.file_service import calculate_sha256
 
         if not os.path.exists(src_path):
             return None
-
         size = os.path.getsize(src_path)
-
-        with db_session() as conn:
-            cursor = conn.execute(
-                "SELECT organized_path, sha256 FROM file_history WHERE file_size = ? AND status = 'active'",
-                (size,),
-            )
-            candidates = cursor.fetchall()
-
-            if not candidates:
-                return None
-
-            src_hash = calculate_sha256(src_path)
-            for cand in candidates:
-                if cand["sha256"] == src_hash:
-                    return cand["organized_path"]
+        candidates = size_map.get(size)
+        if not candidates:
+            return None
+        src_hash = calculate_sha256(src_path)
+        for sha, org_path in candidates:
+            if sha == src_hash:
+                return org_path
     except Exception as e:
-        logging.error(f"Error checking DB duplicate for {src_path}: {e}")
-
+        logging.error(f"Error checking in-memory duplicate for {src_path}: {e}")
     return None
+
+
+def _log_file_action_safe(
+    session_id, src_path, dst_path, size, sha, mtime_val, db_write_lock
+):
+    """Calls log_file_action under a lock to serialise concurrent thread writes to SQLite."""
+    from services.db_service import log_file_action
+
+    with db_write_lock:
+        log_file_action(session_id, src_path, dst_path, size, sha, mtime_val)
 
 
 def parse_naming_template(template_str, dt, original_filename):
@@ -122,6 +162,9 @@ def process_file_task(
     local_cancel_event,
     session_id=None,
     lang="ja",
+    size_map=None,
+    size_map_lock=None,
+    db_write_lock=None,
 ):
     """Processes a single file. Used inside worker threads."""
     if local_cancel_event.is_set():
@@ -135,9 +178,11 @@ def process_file_task(
     src_path = os.path.join(s_dir, filename)
     src_dirname = os.path.basename(s_dir)
 
-    # 1. SQLite Database Duplicate Check (session-transcending duplicate check)
+    # 1. Duplicate check using in-memory hash map (avoids per-thread DB connections)
     try:
-        duplicate_path = check_db_duplicate(src_path)
+        duplicate_path = (
+            check_memory_duplicate(src_path, size_map) if size_map is not None else None
+        )
         if duplicate_path:
             return {
                 "status": "success",
@@ -290,7 +335,7 @@ def process_file_task(
 
         if not is_skip:
             if mode == "move":
-                safe_move(src_path, dst_path)
+                file_hash = safe_move(src_path, dst_path)
                 copied = True
                 action_done = "move"
                 log_type = "success"
@@ -303,7 +348,7 @@ def process_file_task(
                     target=resolved_filename,
                 )
             else:
-                safe_copy(src_path, dst_path)
+                file_hash = safe_copy(src_path, dst_path)
                 copied = True
                 action_done = "copy"
                 log_type = "success"
@@ -316,17 +361,25 @@ def process_file_task(
                     target=resolved_filename,
                 )
 
-            # Log action to SQLite database
-            if session_id:
-                try:
-                    from services.db_service import log_file_action
-                    from services.file_service import calculate_sha256
+            dst_size = os.path.getsize(dst_path)
+            mtime_val = os.path.getmtime(dst_path)
 
-                    size = os.path.getsize(dst_path)
-                    sha = calculate_sha256(dst_path)
-                    mtime_val = os.path.getmtime(dst_path)
-                    log_file_action(
-                        session_id, src_path, dst_path, size, sha, mtime_val
+            # Update in-memory hash map so subsequent workers can detect this file as duplicate
+            if size_map is not None and size_map_lock is not None:
+                with size_map_lock:
+                    size_map.setdefault(dst_size, []).append((file_hash, dst_path))
+
+            # Write to DB synchronously under a lock to serialise concurrent thread writes
+            if session_id and db_write_lock is not None:
+                try:
+                    _log_file_action_safe(
+                        session_id,
+                        src_path,
+                        dst_path,
+                        dst_size,
+                        file_hash,
+                        mtime_val,
+                        db_write_lock,
                     )
                 except Exception as db_err:
                     logging.error(f"Failed to log file action: {db_err}")
@@ -390,6 +443,7 @@ def arrange_photos(
     date_start=None,
     date_end=None,
     lang="ja",
+    recursive=False,
 ):
     """Executes the photo arrangement process and yields progress data as SSE chunks."""
     cancel_event.clear()
@@ -413,13 +467,24 @@ def arrange_photos(
         except Exception as db_err:
             logging.error(f"Failed to register session: {db_err}")
 
-    # 2. Scan and filter files
+    # 2. Preload active file hashes for in-memory duplicate detection (avoids per-thread DB reads)
+    size_map = load_memory_hashes() if not dry_run else {}
+    size_map_lock = threading.Lock()
+
+    # 3. Lock to serialise concurrent DB writes from worker threads (avoids SQLite lock errors)
+    db_write_lock = threading.Lock()
+
+    # 4. Scan and filter files
     files_to_process = []
     for d in src_dirs:
         try:
             files_to_process.extend(
                 scan_directories(
-                    [d], extensions=extensions, date_start=date_start, date_end=date_end
+                    [d],
+                    extensions=extensions,
+                    date_start=date_start,
+                    date_end=date_end,
+                    recursive=recursive,
                 )
             )
         except Exception as e:
@@ -462,6 +527,9 @@ def arrange_photos(
                 cancel_event,
                 session_id,
                 lang,
+                size_map,
+                size_map_lock,
+                db_write_lock,
             ): (s_dir, filename)
             for s_dir, filename in files_to_process
         }

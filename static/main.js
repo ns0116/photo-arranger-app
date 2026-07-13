@@ -62,10 +62,12 @@ function saveSettings() {
     const dateEnd = document.getElementById('date-end') ? document.getElementById('date-end').value : '';
     const modeEl = document.querySelector('.toggle-option.active');
     const mode = modeEl ? modeEl.getAttribute('data-value') : 'copy';
+    const recursiveEl = document.getElementById('recursive-scan');
+    const recursive = recursiveEl ? recursiveEl.checked : false;
     try {
         const lang = document.querySelector('.lang-option.active');
         const language = lang ? (lang.id === 'btn-lang-en' ? 'en' : 'ja') : 'ja';
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ srcDirs, dstDir, namingRule, customTemplate, extensions, dateStart, dateEnd, mode, language }));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ srcDirs, dstDir, namingRule, customTemplate, extensions, dateStart, dateEnd, mode, language, recursive }));
     } catch (e) { /* storage unavailable */ }
 }
 
@@ -199,6 +201,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('input[name="extensions"]').forEach(cb => cb.addEventListener('change', saveSettings));
     document.getElementById('date-start').addEventListener('change', saveSettings);
     document.getElementById('date-end').addEventListener('change', saveSettings);
+    document.getElementById('recursive-scan').addEventListener('change', saveSettings);
 
     // Clear logs
     btnClearLog.addEventListener('click', () => {
@@ -352,16 +355,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     'Content-Type': 'application/json',
                     'X-CSRF-Token': getCsrfToken(),
                 },
-                body: JSON.stringify({ 
-                    src_dirs: srcDirs, 
-                    dst_dir: dstDir, 
+                body: JSON.stringify({
+                    src_dirs: srcDirs,
+                    dst_dir: dstDir,
                     naming_rule: namingRule,
                     mode: selectedMode,
                     dry_run: dryRun,
                     extensions: extensions.length > 0 ? extensions : null,
                     date_start: dateStart,
                     date_end: dateEnd,
-                    lang: currentLang
+                    lang: currentLang,
+                    recursive: document.getElementById('recursive-scan') ? document.getElementById('recursive-scan').checked : false
                 })
             });
 
@@ -804,6 +808,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (s.dateStart) document.getElementById('date-start').value = s.dateStart;
             if (s.dateEnd) document.getElementById('date-end').value = s.dateEnd;
+
+            const recursiveEl = document.getElementById('recursive-scan');
+            if (recursiveEl && s.recursive !== undefined) recursiveEl.checked = s.recursive;
         } catch (e) { /* corrupt storage — ignore */ }
     }
 
