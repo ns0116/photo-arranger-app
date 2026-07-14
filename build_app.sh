@@ -15,14 +15,14 @@ fi
 
 # 仮想環境が有効か確認し、PyInstallerをインストール
 echo "1. 依存ライブラリのインストール..."
-./venv/bin/pip install pyinstaller
+./venv/bin/python -m pip install pyinstaller
 
 # PyInstallerでビルド
 # --onefile: 1つの実行ファイルにまとめる
 # --windowed: バックグラウンドのCUIウィンドウを表示しない（macOSでは.appバンドルが生成される）
 # --add-data: テンプレートやCSS/JS静的ファイルをバイナリに同梱する
 echo "2. スタンドアローン.appのビルドを開始..."
-./venv/bin/pyinstaller --onefile --windowed \
+./venv/bin/python -m PyInstaller --onefile --windowed \
   --icon="assets/icon.icns" \
   --add-data "templates:templates" \
   --add-data "static:static" \
