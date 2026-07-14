@@ -13,11 +13,11 @@ if not exist "venv" (
 )
 
 echo 1. Installing/updating dependencies (PyInstaller, pillow, Flask)...
-call .\venv\Scripts\pip.exe install pyinstaller pillow Flask
+call .\venv\Scripts\python.exe -m pip install pyinstaller pillow Flask
 
 echo 2. Building standalone .exe...
 :: In PyInstaller for Windows, use semicolon (;) as path separator for --add-data
-call .\venv\Scripts\pyinstaller.exe --onefile --windowed ^
+call .\venv\Scripts\python.exe -m PyInstaller --onefile --windowed ^
   --icon="assets\icon.ico" ^
   --add-data "templates;templates" ^
   --add-data "static;static" ^
