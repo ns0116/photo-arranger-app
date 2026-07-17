@@ -562,6 +562,23 @@ footer {
     color: var(--text-primary);
 }
 
+/* Settings profile controls */
+.profile-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+}
+
+.profile-actions .btn {
+    padding: 0.6rem 1rem;
+    font-size: 0.85rem;
+}
+
+.profile-actions #btn-profile-delete {
+    flex: 0 0 auto;
+}
+
 /* Header layout extension */
 .header-top {
     display: flex;
