@@ -11,6 +11,11 @@ def _extract_exif_datetime(img):
     """Reads the first usable date-taken tag from an already-opened Pillow image.
 
     Returns a datetime object if successfully parsed, or None otherwise.
+
+    Only extensions in Config.IMAGE_EXTENSIONS are attempted. Video files
+    (Config.VIDEO_EXTENSIONS) are intentionally excluded here since Pillow
+    cannot read EXIF from them; callers fall back to file mtime for those,
+    matching the existing fallback used for images without EXIF data.
     """
     exif_data = img.getexif()
     if not exif_data:

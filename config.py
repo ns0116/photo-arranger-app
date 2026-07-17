@@ -18,6 +18,21 @@ class Config:
         ".bmp",
     }
 
+    # Video extensions. Pillow cannot read EXIF from these, so date resolution
+    # always falls back to file mtime (see utils.date_utils.get_exif_date, which
+    # only attempts EXIF extraction for IMAGE_EXTENSIONS). Accurate capture-date
+    # extraction from video container metadata (e.g. MP4 mvhd/moov atoms) is a
+    # documented follow-up, not implemented here (see issue #26).
+    VIDEO_EXTENSIONS = {
+        ".mp4",
+        ".m4v",
+        ".mov",
+        ".avi",
+    }
+
+    # Combined set of all media extensions scanned/processed by default.
+    MEDIA_EXTENSIONS = IMAGE_EXTENSIONS | VIDEO_EXTENSIONS
+
     # Rename attempts limit for name collisions
     MAX_RENAME_ATTEMPTS = 10000
 

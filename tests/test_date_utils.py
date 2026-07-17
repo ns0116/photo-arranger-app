@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, timedelta
+from unittest.mock import patch
 
 from utils.date_utils import get_exif_date, get_exif_validation
 
@@ -137,3 +138,32 @@ def test_get_exif_date_returns_none_for_corrupt_file(temp_workspace, image_creat
     image_creator(filepath, content=b"not an image")
 
     assert get_exif_date(filepath) is None
+
+
+def test_video_extension_returns_none(temp_workspace, image_creator):
+    """Test get_exif_date returns None for video files (not an error, no EXIF support)."""
+    filepath = os.path.join(temp_workspace["src"], "clip.mp4")
+    image_creator(filepath, content=b"not a real mp4, just plain bytes")
+
+    dt = get_exif_date(filepath)
+    assert dt is None
+
+
+def test_video_extension_does_not_invoke_pillow(temp_workspace, image_creator):
+    """Test get_exif_date skips Pillow entirely for video extensions.
+
+    Video files aren't valid images, so calling Image.open on them would raise.
+    This confirms the extension guard short-circuits before Pillow is ever touched,
+    for every extension in Config.VIDEO_EXTENSIONS.
+    """
+    from config import Config
+
+    for ext in Config.VIDEO_EXTENSIONS:
+        filepath = os.path.join(temp_workspace["src"], f"clip{ext}")
+        image_creator(filepath, content=b"not a real video, just plain bytes")
+
+        with patch("utils.date_utils.Image.open") as mock_open:
+            dt = get_exif_date(filepath)
+
+        assert dt is None
+        mock_open.assert_not_called()

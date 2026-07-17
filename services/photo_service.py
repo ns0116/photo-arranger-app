@@ -30,7 +30,7 @@ def scan_directories(
     When date filtering is active, EXIF reads are parallelized across a thread pool.
     """
     ext_set = (
-        {e.lower() for e in extensions} if extensions else set(Config.IMAGE_EXTENSIONS)
+        {e.lower() for e in extensions} if extensions else set(Config.MEDIA_EXTENSIONS)
     )
     candidates = []
 
@@ -329,6 +329,8 @@ def process_file_task(
                 "status": "success",
                 "filename": filename,
                 "src_dir": src_dirname,
+                "src_dir_full": s_dir,
+                "full_path": src_path,
                 "folder": folder_name,
                 "action": action,
                 "target": os.path.basename(target_path),

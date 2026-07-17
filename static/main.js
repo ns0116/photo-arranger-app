@@ -48,9 +48,45 @@ function showConfirm(message, cancelLabel) {
     });
 }
 
-const STORAGE_KEY = 'photoArrangerSettings';
+function showPrompt(message, defaultValue, cancelLabel) {
+    return new Promise(resolve => {
+        const overlay = document.getElementById('app-modal');
+        const msgEl = document.getElementById('modal-message');
+        const inputEl = document.getElementById('modal-input');
+        const okBtn = document.getElementById('modal-ok');
+        const cancelBtn = document.getElementById('modal-cancel');
+        msgEl.textContent = message;
+        inputEl.value = defaultValue || '';
+        inputEl.classList.remove('hidden');
+        cancelBtn.textContent = cancelLabel || 'キャンセル';
+        cancelBtn.classList.remove('hidden');
+        overlay.classList.remove('hidden');
+        inputEl.focus();
+        const onOk = () => { const val = inputEl.value.trim(); cleanup(); resolve(val || null); };
+        const onCancel = () => { cleanup(); resolve(null); };
+        const onKeydown = (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); onOk(); }
+            else if (e.key === 'Escape') { onCancel(); }
+        };
+        const cleanup = () => {
+            overlay.classList.add('hidden');
+            inputEl.classList.add('hidden');
+            okBtn.removeEventListener('click', onOk);
+            cancelBtn.removeEventListener('click', onCancel);
+            inputEl.removeEventListener('keydown', onKeydown);
+        };
+        okBtn.addEventListener('click', onOk);
+        cancelBtn.addEventListener('click', onCancel);
+        inputEl.addEventListener('keydown', onKeydown);
+    });
+}
 
-function saveSettings() {
+// Legacy single-profile key, kept only as a migration source (issue #31).
+const STORAGE_KEY = 'photoArrangerSettings';
+// New multi-profile storage key: { activeProfile, profiles: [{ name, settings }] }
+const PROFILES_KEY = 'photoArrangerProfiles';
+
+function getCurrentFormSettings() {
     const srcDirInputs = document.querySelectorAll('.src-dir-input');
     const srcDirs = Array.from(srcDirInputs).map(i => i.value);
     const dstDir = document.getElementById('dst-dir') ? document.getElementById('dst-dir').value : '';
@@ -64,10 +100,60 @@ function saveSettings() {
     const mode = modeEl ? modeEl.getAttribute('data-value') : 'copy';
     const recursiveEl = document.getElementById('recursive-scan');
     const recursive = recursiveEl ? recursiveEl.checked : false;
+    const lang = document.querySelector('.lang-option.active');
+    const language = lang ? (lang.id === 'btn-lang-en' ? 'en' : 'ja') : 'ja';
+    return { srcDirs, dstDir, namingRule, customTemplate, extensions, dateStart, dateEnd, mode, language, recursive };
+}
+
+function loadProfilesStore() {
     try {
-        const lang = document.querySelector('.lang-option.active');
-        const language = lang ? (lang.id === 'btn-lang-en' ? 'en' : 'ja') : 'ja';
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ srcDirs, dstDir, namingRule, customTemplate, extensions, dateStart, dateEnd, mode, language, recursive }));
+        const raw = localStorage.getItem(PROFILES_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || !Array.isArray(parsed.profiles) || parsed.profiles.length === 0) return null;
+        return parsed;
+    } catch (e) {
+        return null;
+    }
+}
+
+function saveProfilesStore(store) {
+    try {
+        localStorage.setItem(PROFILES_KEY, JSON.stringify(store));
+    } catch (e) { /* storage unavailable */ }
+}
+
+// Migrates the legacy single-profile localStorage format (pre-#31) into the
+// new named-profiles format, wrapping any existing settings into a single
+// "Default"/"デフォルト" profile so returning users don't lose their settings.
+function migrateLegacySettingsIfNeeded() {
+    const existing = loadProfilesStore();
+    if (existing) return existing;
+
+    let legacySettings = null;
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) legacySettings = JSON.parse(raw);
+    } catch (e) { /* corrupt legacy data - ignore */ }
+
+    const language = legacySettings && legacySettings.language === 'en' ? 'en' : 'ja';
+    const defaultName = language === 'en' ? 'Default' : 'デフォルト';
+
+    const store = {
+        activeProfile: defaultName,
+        profiles: [{ name: defaultName, settings: legacySettings || getCurrentFormSettings() }]
+    };
+    saveProfilesStore(store);
+    return store;
+}
+
+function saveSettings() {
+    try {
+        const store = loadProfilesStore() || migrateLegacySettingsIfNeeded();
+        const idx = store.profiles.findIndex(p => p.name === store.activeProfile);
+        if (idx === -1) return;
+        store.profiles[idx].settings = getCurrentFormSettings();
+        saveProfilesStore(store);
     } catch (e) { /* storage unavailable */ }
 }
 
@@ -83,7 +169,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnCancel = document.getElementById('btn-cancel');
     const btnShutdown = document.getElementById('btn-shutdown');
     const namingRuleSelect = document.getElementById('naming-rule');
-    
+
+    const profileSelect = document.getElementById('profile-select');
+    const btnProfileSave = document.getElementById('btn-profile-save');
+    const btnProfileSaveAs = document.getElementById('btn-profile-save-as');
+    const btnProfileDelete = document.getElementById('btn-profile-delete');
+
     const progressCard = document.getElementById('progress-card');
     const progressPercent = document.getElementById('progress-percent');
     const progressBar = document.getElementById('progress-bar');
@@ -105,10 +196,65 @@ document.addEventListener('DOMContentLoaded', () => {
     const logConsole = document.getElementById('log-console');
     const btnUndo = document.getElementById('btn-undo');
 
+    const reportEmpty = document.getElementById('report-empty');
+    const reportContent = document.getElementById('report-content');
+    const reportTotalSessions = document.getElementById('report-total-sessions');
+    const reportTotalFiles = document.getElementById('report-total-files');
+    const reportCopyFiles = document.getElementById('report-copy-files');
+    const reportMoveFiles = document.getElementById('report-move-files');
+    const reportTotalSize = document.getElementById('report-total-size');
+    const reportMonthlyList = document.getElementById('report-monthly-list');
+    const btnRefreshReport = document.getElementById('btn-refresh-report');
+
     // Current app state
     let selectedMode = 'copy'; // Default mode
     let simulationResults = [];
     let currentLang = 'ja';
+    let lastReportData = null;
+    let thumbObjectUrls = [];
+
+    // Lazily fetches and displays thumbnails for the Dry Run preview list once a
+    // row scrolls into view, avoiding upfront requests for every result.
+    const thumbObserver = ('IntersectionObserver' in window)
+        ? new IntersectionObserver((entries, obs) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    obs.unobserve(entry.target);
+                    loadThumbnail(entry.target);
+                }
+            });
+        }, { root: previewList, rootMargin: '100px' })
+        : null;
+
+    async function loadThumbnail(imgEl) {
+        const fullPath = imgEl.dataset.fullPath;
+        const srcDir = imgEl.dataset.srcDir;
+        if (!fullPath || !srcDir) {
+            imgEl.classList.add('thumb-error');
+            return;
+        }
+        try {
+            const params = new URLSearchParams();
+            params.set('path', fullPath);
+            params.append('src_dir', srcDir);
+            const response = await fetch(`/api/thumbnail?${params.toString()}`, {
+                headers: { 'X-CSRF-Token': getCsrfToken() },
+            });
+            if (!response.ok) throw new Error('thumbnail unavailable');
+            const blob = await response.blob();
+            const objectUrl = URL.createObjectURL(blob);
+            thumbObjectUrls.push(objectUrl);
+            imgEl.src = objectUrl;
+            imgEl.classList.add('loaded');
+        } catch (error) {
+            imgEl.classList.add('thumb-error');
+        }
+    }
+
+    function clearThumbnailUrls() {
+        thumbObjectUrls.forEach(url => URL.revokeObjectURL(url));
+        thumbObjectUrls = [];
+    }
 
     // Toggle mode buttons
     const toggleOptions = document.querySelectorAll('.toggle-option');
@@ -337,6 +483,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (dryRun) {
             previewCard.classList.add('hidden');
+            clearThumbnailUrls();
             previewList.innerHTML = '';
             addLog(currentLang === 'ja' ? 'シミュレーション（Dry Run）を開始します...' : 'Starting simulation (Dry Run)...', 'info');
         } else {
@@ -428,6 +575,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Show Undo button only on successful actual runs
                 if (!dryRun) {
                     btnUndo.classList.remove('hidden');
+                    loadReport(); // Refresh stats after files were actually organized
                 }
             } else {
                 progressIcon.className = 'fa-solid fa-circle-exclamation';
@@ -513,6 +661,7 @@ document.addEventListener('DOMContentLoaded', () => {
         previewCount.textContent = warningCount > 0
             ? `${simulationResults.length} ${itemsLabel} (⚠ ${warningCount})`
             : `${simulationResults.length} ${itemsLabel}`;
+        clearThumbnailUrls();
         previewList.innerHTML = '';
 
         simulationResults.forEach(item => {
@@ -555,8 +704,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     <span>${escapeHtml(item.warning.message)}</span>
                 </div>
             ` : '';
+            const hasThumbSource = Boolean(item.full_path && item.src_dir_full);
+            const thumbHtml = hasThumbSource
+                ? `<img class="preview-thumb" alt="" data-full-path="${escapeHtml(item.full_path)}" data-src-dir="${escapeHtml(item.src_dir_full)}">`
+                : `<div class="preview-thumb preview-thumb-placeholder"><i class="fa-regular fa-image"></i></div>`;
             row.innerHTML = `
                 <div class="preview-row-main">
+                    ${thumbHtml}
                     <div class="preview-file" title="${fileDisplay}">
                         ${fileDisplay}
                     </div>
@@ -569,6 +723,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 ${warningHtml}
             `;
             previewList.appendChild(row);
+
+            if (hasThumbSource) {
+                const thumbEl = row.querySelector('.preview-thumb');
+                if (thumbObserver) {
+                    thumbObserver.observe(thumbEl);
+                } else {
+                    loadThumbnail(thumbEl);
+                }
+            }
         });
     }
 
@@ -600,6 +763,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             await showAlert(data.message);
             btnUndo.classList.add('hidden'); // Hide undo button after rollback succeeds
+            loadReport(); // Refresh stats since the undo changed organized-file counts
         } catch (error) {
             console.error('Undo request failed:', error);
             addLog(`${currentLang === 'ja' ? 'Undo失敗' : 'Undo failed'}: ${error.message}`, 'error');
@@ -610,6 +774,90 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Format a byte count into a human-readable string (B/KB/MB/GB/TB)
+    function formatBytes(bytes) {
+        if (!bytes || bytes <= 0) return '0 B';
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        let value = bytes;
+        let unitIndex = 0;
+        while (value >= 1024 && unitIndex < units.length - 1) {
+            value /= 1024;
+            unitIndex++;
+        }
+        return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+    }
+
+    // Render the report/statistics card from aggregated /api/report data
+    function renderReport(data) {
+        const totals = data.totals || {};
+        const monthly = data.monthly || [];
+
+        if (!totals.total_sessions && !totals.total_files) {
+            reportEmpty.classList.remove('hidden');
+            reportContent.classList.add('hidden');
+            return;
+        }
+
+        reportEmpty.classList.add('hidden');
+        reportContent.classList.remove('hidden');
+
+        reportTotalSessions.textContent = totals.total_sessions || 0;
+        reportTotalFiles.textContent = totals.total_files || 0;
+        reportCopyFiles.textContent = totals.copy_files || 0;
+        reportMoveFiles.textContent = totals.move_files || 0;
+        reportTotalSize.textContent = formatBytes(totals.total_size || 0);
+
+        reportMonthlyList.innerHTML = '';
+        const maxTotal = monthly.reduce((max, m) => Math.max(max, m.total_files || 0), 0) || 1;
+        const copyLabel = currentLang === 'ja' ? 'コピー' : 'Copy';
+        const moveLabel = currentLang === 'ja' ? '移動' : 'Move';
+        const filesUnit = currentLang === 'ja' ? '件' : 'files';
+
+        // Most recent month first
+        [...monthly].reverse().forEach(m => {
+            const totalFiles = m.total_files || 0;
+            const copyFiles = m.copy_files || 0;
+            const moveFiles = m.move_files || 0;
+            const copyPct = (copyFiles / maxTotal) * 100;
+            const movePct = (moveFiles / maxTotal) * 100;
+
+            const row = document.createElement('div');
+            row.className = 'report-month-row';
+            row.innerHTML = `
+                <div class="report-month-row-header">
+                    <span class="report-month-label">${escapeHtml(m.month || '-')}</span>
+                    <span class="report-month-count">${totalFiles} ${filesUnit} (${copyLabel} ${copyFiles} / ${moveLabel} ${moveFiles})</span>
+                </div>
+                <div class="report-bar-track">
+                    <div class="report-bar-copy" style="width:${copyPct}%"></div>
+                    <div class="report-bar-move" style="width:${movePct}%"></div>
+                </div>
+            `;
+            reportMonthlyList.appendChild(row);
+        });
+    }
+
+    // Fetch aggregated report data from the backend and render it
+    async function loadReport() {
+        try {
+            if (btnRefreshReport) btnRefreshReport.disabled = true;
+            const response = await fetch('/api/report');
+            const data = await response.json();
+            if (response.ok) {
+                lastReportData = data;
+                renderReport(data);
+            }
+        } catch (error) {
+            console.error('Failed to load report:', error);
+        } finally {
+            if (btnRefreshReport) btnRefreshReport.disabled = false;
+        }
+    }
+
+    if (btnRefreshReport) {
+        btnRefreshReport.addEventListener('click', loadReport);
+    }
+
     // i18n dynamic elements maps
     const btnLangJa = document.getElementById('btn-lang-ja');
     const btnLangEn = document.getElementById('btn-lang-en');
@@ -618,6 +866,16 @@ document.addEventListener('DOMContentLoaded', () => {
         ja: {
             'subtitle-text': 'EXIF撮影日時とファイル更新日時を自動解析して写真を整理します',
             'setup-title': '設定',
+            'lbl-profile': '設定プロファイル',
+            'btn-profile-save': '保存',
+            'btn-profile-save-title': '現在の設定を選択中のプロファイルに上書き保存します',
+            'btn-profile-save-as': '新規保存',
+            'btn-profile-save-as-title': '現在の設定を新しい名前のプロファイルとして保存します',
+            'btn-profile-delete-title': '選択中のプロファイルを削除します',
+            'prompt-profile-name': '保存するプロファイル名を入力してください',
+            'confirm-profile-overwrite': '「{name}」は既に存在します。上書きしますか？',
+            'confirm-profile-delete': '「{name}」を削除しますか？',
+            'error-profile-last': '最低1つのプロファイルが必要なため、これ以上削除できません。',
             'lbl-src-dirs': 'コピー元ディレクトリ',
             'placeholder-src': '整理する写真が入っているフォルダのパス',
             'btn-select': '選択',
@@ -650,11 +908,31 @@ document.addEventListener('DOMContentLoaded', () => {
             'shutdown-confirm': 'サーバーをシャットダウンしますか？終了すると再度起動するまでアプリは利用できなくなります。',
             'error-select-dirs': 'コピー元とコピー先のディレクトリを指定してください。',
             'shutdown-title-screen': 'サーバーを終了しました',
-            'shutdown-desc-screen': 'ブラウザのタブを閉じて問題ありません。'
+            'shutdown-desc-screen': 'ブラウザのタブを閉じて問題ありません。',
+            'title-report': 'レポート',
+            'lbl-refresh-report': '更新',
+            'text-report-empty': 'まだ整理履歴がありません。',
+            'lbl-report-sessions': '実行回数',
+            'lbl-report-total-files': '整理済ファイル',
+            'lbl-report-copy-files': 'コピー',
+            'lbl-report-move-files': '移動',
+            'lbl-report-total-size': '合計サイズ',
+            'lbl-legend-copy': 'コピー',
+            'lbl-legend-move': '移動'
         },
         en: {
             'subtitle-text': 'Automatically organize photos into date folders using EXIF metadata and file mtimes',
             'setup-title': 'Settings',
+            'lbl-profile': 'Settings Profile',
+            'btn-profile-save': 'Save',
+            'btn-profile-save-title': 'Overwrite the selected profile with the current settings',
+            'btn-profile-save-as': 'Save As New',
+            'btn-profile-save-as-title': 'Save the current settings as a new named profile',
+            'btn-profile-delete-title': 'Delete the selected profile',
+            'prompt-profile-name': 'Enter a name for this profile',
+            'confirm-profile-overwrite': 'A profile named "{name}" already exists. Overwrite it?',
+            'confirm-profile-delete': 'Delete profile "{name}"?',
+            'error-profile-last': 'At least one profile is required, so this one cannot be deleted.',
             'lbl-src-dirs': 'Source Directory',
             'placeholder-src': 'Path to folder containing photos to organize',
             'btn-select': 'Select',
@@ -687,7 +965,17 @@ document.addEventListener('DOMContentLoaded', () => {
             'shutdown-confirm': 'Shutdown server? The app will become unavailable until started again.',
             'error-select-dirs': 'Please specify source and destination directories.',
             'shutdown-title-screen': 'Server Stopped',
-            'shutdown-desc-screen': 'You can safely close this browser tab.'
+            'shutdown-desc-screen': 'You can safely close this browser tab.',
+            'title-report': 'Report',
+            'lbl-refresh-report': 'Refresh',
+            'text-report-empty': 'No arrange history yet.',
+            'lbl-report-sessions': 'Runs',
+            'lbl-report-total-files': 'Files Organized',
+            'lbl-report-copy-files': 'Copied',
+            'lbl-report-move-files': 'Moved',
+            'lbl-report-total-size': 'Total Size',
+            'lbl-legend-copy': 'Copy',
+            'lbl-legend-move': 'Move'
         }
     };
 
@@ -715,6 +1003,18 @@ document.addEventListener('DOMContentLoaded', () => {
         // Update texts
         document.getElementById('subtitle-text').textContent = dict['subtitle-text'];
         document.querySelector('.setup-card .card-header h2').innerHTML = `<i class="fa-solid fa-sliders"></i> ${dict['setup-title']}`;
+
+        document.getElementById('lbl-profile').innerHTML = `<i class="fa-solid fa-user-gear"></i> ${dict['lbl-profile']}`;
+        // The save/save-as buttons briefly swap to an icon-only checkmark after a
+        // click (see flashButtonSuccess), so their text spans may not exist yet.
+        const profileSaveTextEl = document.getElementById('btn-profile-save-text');
+        if (profileSaveTextEl) profileSaveTextEl.textContent = dict['btn-profile-save'];
+        const profileSaveAsTextEl = document.getElementById('btn-profile-save-as-text');
+        if (profileSaveAsTextEl) profileSaveAsTextEl.textContent = dict['btn-profile-save-as'];
+        btnProfileSave.title = dict['btn-profile-save-title'];
+        btnProfileSaveAs.title = dict['btn-profile-save-as-title'];
+        btnProfileDelete.title = dict['btn-profile-delete-title'];
+
         document.querySelector('label[for="dst-dir"]').innerHTML = `<i class="fa-solid fa-folder-open"></i> ${dict['lbl-dst-dir']}`;
         dstDirInput.placeholder = dict['placeholder-dst'];
         document.querySelector('.form-group label:not([for])').innerHTML = `<i class="fa-solid fa-gears"></i> ${dict['lbl-mode']}`;
@@ -766,25 +1066,43 @@ document.addEventListener('DOMContentLoaded', () => {
                 btn.innerHTML = `<i class="fa-solid fa-magnifying-glass"></i> ${dict['btn-select']}`;
             }
         });
+
+        // Report card
+        document.getElementById('title-report').textContent = dict['title-report'];
+        document.getElementById('lbl-refresh-report').textContent = dict['lbl-refresh-report'];
+        document.getElementById('text-report-empty').textContent = dict['text-report-empty'];
+        document.getElementById('lbl-report-sessions').textContent = dict['lbl-report-sessions'];
+        document.getElementById('lbl-report-total-files').textContent = dict['lbl-report-total-files'];
+        document.getElementById('lbl-report-copy-files').textContent = dict['lbl-report-copy-files'];
+        document.getElementById('lbl-report-move-files').textContent = dict['lbl-report-move-files'];
+        document.getElementById('lbl-report-total-size').textContent = dict['lbl-report-total-size'];
+        document.getElementById('lbl-legend-copy').textContent = dict['lbl-legend-copy'];
+        document.getElementById('lbl-legend-move').textContent = dict['lbl-legend-move'];
+        // Re-render the monthly breakdown so its inline copy/move labels follow the new language
+        if (lastReportData) renderReport(lastReportData);
     }
 
     btnLangJa.addEventListener('click', () => { setLanguage('ja'); saveSettings(); });
     btnLangEn.addEventListener('click', () => { setLanguage('en'); saveSettings(); });
 
-    function loadSettings() {
+    // Applies a saved settings object (one profile's worth) onto the form.
+    // Used both for the initial page load and whenever the user switches profiles.
+    function applySettingsToForm(s) {
+        if (!s) return;
         try {
-            const raw = localStorage.getItem(STORAGE_KEY);
-            if (!raw) return;
-            const s = JSON.parse(raw);
-
             // Restore language first so placeholders render correctly
             if (s.language) setLanguage(s.language);
 
-            // Restore source directories
+            // Reset source directory rows down to a single blank row before restoring
+            const existingRows = srcDirsContainer.querySelectorAll('.src-dir-row');
+            existingRows.forEach((row, idx) => { if (idx > 0) row.remove(); });
+            const firstInput = srcDirsContainer.querySelector('.src-dir-input');
+            if (firstInput) firstInput.value = '';
+
             if (Array.isArray(s.srcDirs) && s.srcDirs.length > 0) {
-                const rows = srcDirsContainer.querySelectorAll('.src-dir-row');
                 s.srcDirs.forEach((dir, idx) => {
                     if (idx === 0) {
+                        const rows = srcDirsContainer.querySelectorAll('.src-dir-row');
                         const input = rows[0] && rows[0].querySelector('.src-dir-input');
                         if (input) input.value = dir;
                     } else if (dir) {
@@ -795,42 +1113,131 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 });
             }
+            updateRemoveButtonsVisibility();
 
-            if (s.dstDir) dstDirInput.value = s.dstDir;
+            dstDirInput.value = s.dstDir || '';
 
-            if (s.namingRule) {
-                const select = document.getElementById('naming-rule');
-                select.value = s.namingRule;
-                const customGroup = document.getElementById('custom-template-group');
-                if (s.namingRule === 'custom') {
-                    customGroup.classList.remove('hidden');
-                    if (s.customTemplate) document.getElementById('custom-template').value = s.customTemplate;
-                } else {
-                    customGroup.classList.add('hidden');
-                }
+            const namingSelect = document.getElementById('naming-rule');
+            namingSelect.value = s.namingRule || 'YYYY-MM-DD';
+            const customGroup = document.getElementById('custom-template-group');
+            if (namingSelect.value === 'custom') {
+                customGroup.classList.remove('hidden');
+                document.getElementById('custom-template').value = s.customTemplate || '';
+            } else {
+                customGroup.classList.add('hidden');
             }
 
-            if (s.mode) {
-                toggleOptions.forEach(opt => {
-                    if (opt.getAttribute('data-value') === s.mode) {
-                        opt.click();
-                    }
-                });
-            }
+            document.querySelectorAll('input[name="extensions"]').forEach(cb => {
+                cb.checked = Array.isArray(s.extensions) && s.extensions.includes(cb.value);
+            });
 
-            if (Array.isArray(s.extensions)) {
-                document.querySelectorAll('input[name="extensions"]').forEach(cb => {
-                    cb.checked = s.extensions.includes(cb.value);
-                });
-            }
-
-            if (s.dateStart) document.getElementById('date-start').value = s.dateStart;
-            if (s.dateEnd) document.getElementById('date-end').value = s.dateEnd;
+            document.getElementById('date-start').value = s.dateStart || '';
+            document.getElementById('date-end').value = s.dateEnd || '';
 
             const recursiveEl = document.getElementById('recursive-scan');
-            if (recursiveEl && s.recursive !== undefined) recursiveEl.checked = s.recursive;
-        } catch (e) { /* corrupt storage — ignore */ }
+            if (recursiveEl) recursiveEl.checked = !!s.recursive;
+
+            // Apply mode last: the toggle's click handler also calls saveSettings(),
+            // so by the time it fires the rest of the form already reflects this profile.
+            const targetMode = s.mode || 'copy';
+            toggleOptions.forEach(opt => {
+                if (opt.getAttribute('data-value') === targetMode) {
+                    opt.click();
+                }
+            });
+        } catch (e) { /* corrupt profile data — ignore */ }
     }
 
-    loadSettings();
+    function populateProfileSelect(store) {
+        profileSelect.innerHTML = '';
+        store.profiles.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.name;
+            opt.textContent = p.name;
+            profileSelect.appendChild(opt);
+        });
+        profileSelect.value = store.activeProfile;
+    }
+
+    function switchProfile(name) {
+        const store = loadProfilesStore();
+        if (!store) return;
+        const profile = store.profiles.find(p => p.name === name);
+        if (!profile) return;
+        store.activeProfile = name;
+        saveProfilesStore(store);
+        applySettingsToForm(profile.settings);
+    }
+
+    function flashButtonSuccess(btn) {
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-check"></i>';
+        setTimeout(() => {
+            btn.innerHTML = original;
+            btn.disabled = false;
+        }, 1200);
+    }
+
+    profileSelect.addEventListener('change', () => {
+        switchProfile(profileSelect.value);
+    });
+
+    btnProfileSave.addEventListener('click', () => {
+        saveSettings();
+        flashButtonSuccess(btnProfileSave);
+    });
+
+    btnProfileSaveAs.addEventListener('click', async () => {
+        const dict = uiStrings[currentLang];
+        const cancelLbl = currentLang === 'ja' ? 'キャンセル' : 'Cancel';
+        const name = await showPrompt(dict['prompt-profile-name'], '', cancelLbl);
+        if (!name) return;
+
+        const store = loadProfilesStore() || migrateLegacySettingsIfNeeded();
+        const existingIdx = store.profiles.findIndex(p => p.name === name);
+        if (existingIdx !== -1) {
+            const overwriteMsg = dict['confirm-profile-overwrite'].replace('{name}', name);
+            if (!await showConfirm(overwriteMsg, cancelLbl)) return;
+            store.profiles[existingIdx].settings = getCurrentFormSettings();
+        } else {
+            store.profiles.push({ name, settings: getCurrentFormSettings() });
+        }
+        store.activeProfile = name;
+        saveProfilesStore(store);
+        populateProfileSelect(store);
+        flashButtonSuccess(btnProfileSaveAs);
+    });
+
+    btnProfileDelete.addEventListener('click', async () => {
+        const dict = uiStrings[currentLang];
+        const cancelLbl = currentLang === 'ja' ? 'キャンセル' : 'Cancel';
+        const store = loadProfilesStore();
+        if (!store) return;
+
+        if (store.profiles.length <= 1) {
+            await showAlert(dict['error-profile-last']);
+            return;
+        }
+
+        const name = store.activeProfile;
+        const confirmMsg = dict['confirm-profile-delete'].replace('{name}', name);
+        if (!await showConfirm(confirmMsg, cancelLbl)) return;
+
+        store.profiles = store.profiles.filter(p => p.name !== name);
+        store.activeProfile = store.profiles[0].name;
+        saveProfilesStore(store);
+        populateProfileSelect(store);
+        applySettingsToForm(store.profiles[0].settings);
+    });
+
+    function initProfiles() {
+        const store = migrateLegacySettingsIfNeeded();
+        populateProfileSelect(store);
+        const active = store.profiles.find(p => p.name === store.activeProfile) || store.profiles[0];
+        if (active) applySettingsToForm(active.settings);
+    }
+
+    initProfiles();
+    loadReport();
 });
