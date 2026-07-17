@@ -25,6 +25,53 @@ def test_scan_directories(temp_workspace, image_creator):
     assert "subdir" not in filenames
 
 
+def test_scan_directories_includes_video_files(temp_workspace, image_creator):
+    """Test scan_directories includes video extensions by default, alongside images."""
+    src = temp_workspace["src"]
+    image_creator(os.path.join(src, "photo1.jpg"))
+    image_creator(os.path.join(src, "clip.mp4"), content=b"fake mp4 data")
+    image_creator(os.path.join(src, "movie.mov"), content=b"fake mov data")
+    image_creator(os.path.join(src, "notes.txt"), content=b"plain text content")
+
+    files = scan_directories([src])
+    filenames = [f[1] for f in files]
+    assert "photo1.jpg" in filenames
+    assert "clip.mp4" in filenames
+    assert "movie.mov" in filenames
+    assert "notes.txt" not in filenames
+
+
+def test_scan_directories_extension_filter_video_only(temp_workspace, image_creator):
+    """Test the extensions filter can restrict scanning to only the selected video type."""
+    src = temp_workspace["src"]
+    image_creator(os.path.join(src, "photo1.jpg"))
+    image_creator(os.path.join(src, "clip.mp4"), content=b"fake mp4 data")
+    image_creator(os.path.join(src, "movie.mov"), content=b"fake mov data")
+
+    files = scan_directories([src], extensions=[".mp4"])
+    filenames = [f[1] for f in files]
+    assert filenames == ["clip.mp4"]
+
+
+def test_process_file_task_video_uses_mtime_fallback(temp_workspace, image_creator):
+    """Test process_file_task resolves video files via mtime since EXIF is unavailable."""
+    src = temp_workspace["src"]
+    dst = temp_workspace["dst"]
+    filepath = os.path.join(src, "clip.mp4")
+    image_creator(filepath, content=b"fake mp4 data")
+
+    # Pin mtime to a known date so the resulting folder name is deterministic.
+    target_ts = datetime(2026, 3, 15, 10, 0, 0).timestamp()
+    os.utime(filepath, (target_ts, target_ts))
+
+    cancel_ev = threading.Event()
+    res = process_file_task(src, "clip.mp4", dst, "%Y-%m-%d", "copy", True, cancel_ev)
+
+    assert res["status"] == "success"
+    assert res["action"] == "copy"
+    assert res["folder"] == "2026-03-15"
+
+
 def test_process_file_task_dry_run_copy(temp_workspace, image_creator):
     """Test process_file_task simulates copy without writing to disk."""
     src = temp_workspace["src"]
