@@ -11,6 +11,11 @@ def get_exif_date(filepath):
     """Extract EXIF Date Taken from an image file using Pillow.
 
     Returns a datetime object if successfully parsed, or None otherwise.
+
+    Only extensions in Config.IMAGE_EXTENSIONS are attempted. Video files
+    (Config.VIDEO_EXTENSIONS) are intentionally excluded here since Pillow
+    cannot read EXIF from them; callers fall back to file mtime for those,
+    matching the existing fallback used for images without EXIF data.
     """
     ext = os.path.splitext(filepath)[1].lower()
     if ext not in Config.IMAGE_EXTENSIONS:

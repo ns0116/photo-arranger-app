@@ -161,6 +161,15 @@
                                 <label style="font-size: 0.85em; cursor: pointer; display: flex; align-items: center; gap: 4px;">
                                     <input type="checkbox" name="extensions" value=".bmp"> .bmp
                                 </label>
+                                <label style="font-size: 0.85em; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                                    <input type="checkbox" name="extensions" value=".mp4"> .mp4/.m4v
+                                </label>
+                                <label style="font-size: 0.85em; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                                    <input type="checkbox" name="extensions" value=".mov"> .mov
+                                </label>
+                                <label style="font-size: 0.85em; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                                    <input type="checkbox" name="extensions" value=".avi"> .avi
+                                </label>
                             </div>
                         </div>
                         <div class="form-group" style="margin-bottom: 10px;">
@@ -258,6 +267,47 @@
                     </div>
                 </div>
                 <div id="log-console" class="log-console"></div>
+            </section>
+
+            <!-- レポートカード -->
+            <section id="report-card" class="card report-card">
+                <div class="card-header">
+                    <h2><i class="fa-solid fa-chart-column"></i> <span id="title-report">レポート</span></h2>
+                    <button type="button" id="btn-refresh-report" class="btn btn-text">
+                        <i class="fa-solid fa-rotate"></i> <span id="lbl-refresh-report">更新</span>
+                    </button>
+                </div>
+                <div id="report-empty" class="report-empty">
+                    <p id="text-report-empty">まだ整理履歴がありません。</p>
+                </div>
+                <div id="report-content" class="hidden">
+                    <div class="stats-grid report-stats-grid">
+                        <div class="stat-box">
+                            <span class="stat-num" id="report-total-sessions">0</span>
+                            <span class="stat-label" id="lbl-report-sessions">実行回数</span>
+                        </div>
+                        <div class="stat-box success">
+                            <span class="stat-num" id="report-total-files">0</span>
+                            <span class="stat-label" id="lbl-report-total-files">整理済ファイル</span>
+                        </div>
+                        <div class="stat-box info">
+                            <span class="stat-num" id="report-copy-files">0</span>
+                            <span class="stat-label" id="lbl-report-copy-files">コピー</span>
+                        </div>
+                        <div class="stat-box">
+                            <span class="stat-num" id="report-move-files">0</span>
+                            <span class="stat-label" id="lbl-report-move-files">移動</span>
+                        </div>
+                    </div>
+                    <div class="report-size-line">
+                        <span id="lbl-report-total-size">合計サイズ</span>: <strong id="report-total-size">0 B</strong>
+                    </div>
+                    <div class="report-legend">
+                        <span class="legend-item"><span class="legend-swatch legend-copy"></span> <span id="lbl-legend-copy">コピー</span></span>
+                        <span class="legend-item"><span class="legend-swatch legend-move"></span> <span id="lbl-legend-move">移動</span></span>
+                    </div>
+                    <div id="report-monthly-list" class="report-monthly-list"></div>
+                </div>
             </section>
         </main>
 

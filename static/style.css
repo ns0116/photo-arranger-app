@@ -361,6 +361,103 @@ input[type="text"]:focus {
 /* 修正 #16: リネーム時のログ行スタイルが欠落していたため追加 */
 .log-line.rename { color: #fbbf24; }
 
+/* Report card */
+.report-stats-grid {
+    margin-bottom: 1rem;
+}
+
+.report-size-line {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.75rem;
+}
+
+.report-size-line strong {
+    color: var(--text-primary);
+}
+
+.report-legend {
+    display: flex;
+    gap: 1rem;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.legend-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    display: inline-block;
+}
+
+.legend-copy { background: var(--info); }
+.legend-move { background: var(--accent-cyan); }
+
+.report-monthly-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    max-height: 260px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.report-month-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.report-month-row-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+}
+
+.report-month-label {
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.report-month-count {
+    color: var(--text-secondary);
+    text-align: right;
+}
+
+.report-bar-track {
+    display: flex;
+    height: 10px;
+    border-radius: 5px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.report-bar-copy {
+    background: var(--info);
+    height: 100%;
+}
+
+.report-bar-move {
+    background: var(--accent-cyan);
+    height: 100%;
+}
+
+.report-empty {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    text-align: center;
+    padding: 1rem 0;
+}
+
 /* Utilities */
 .hidden {
     display: none !important;
@@ -625,6 +722,37 @@ footer {
     border-radius: 6px;
     font-size: 0.8rem;
     border-left: 3px solid transparent;
+    gap: 0.6rem;
+}
+
+/* Dry Run thumbnail preview (Issue #24) */
+.preview-thumb {
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    object-fit: cover;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.preview-thumb.loaded {
+    opacity: 1;
+}
+
+.preview-thumb.thumb-error {
+    opacity: 0.35;
+}
+
+.preview-thumb-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    opacity: 1;
 }
 
 .preview-file {
@@ -633,6 +761,8 @@ footer {
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 45%;
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 .preview-details {
