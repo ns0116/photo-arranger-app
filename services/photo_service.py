@@ -303,6 +303,8 @@ def process_file_task(
                 "status": "success",
                 "filename": filename,
                 "src_dir": src_dirname,
+                "src_dir_full": s_dir,
+                "full_path": src_path,
                 "folder": folder_name,
                 "action": action,
                 "target": os.path.basename(target_path),
