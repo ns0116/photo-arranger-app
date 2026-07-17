@@ -624,6 +624,10 @@ document.addEventListener('DOMContentLoaded', () => {
             addLog(data.message, type);
         }
 
+        if (data.warning) {
+            addLog(`${data.current_file || ''}: ${data.warning.message}`, 'warning');
+        }
+
         if (dryRun && data.action) {
             simulationResults.push(data);
         }
@@ -652,14 +656,19 @@ document.addEventListener('DOMContentLoaded', () => {
     // Render Dry Run preview list
     function renderSimulationPreview() {
         previewCard.classList.remove('hidden');
-        previewCount.textContent = `${simulationResults.length} ${currentLang === 'ja' ? '件' : 'items'}`;
+        const itemsLabel = currentLang === 'ja' ? '件' : 'items';
+        const warningCount = simulationResults.filter(r => r.warning).length;
+        previewCount.textContent = warningCount > 0
+            ? `${simulationResults.length} ${itemsLabel} (⚠ ${warningCount})`
+            : `${simulationResults.length} ${itemsLabel}`;
         clearThumbnailUrls();
         previewList.innerHTML = '';
 
         simulationResults.forEach(item => {
             const row = document.createElement('div');
             const displayAction = item.action || 'copy';
-            row.className = `preview-row ${displayAction}-row`;
+            const isCorrupt = item.warning && item.warning.type === 'corrupt';
+            row.className = `preview-row ${displayAction}-row${item.warning ? ' has-warning' : ''}${isCorrupt ? ' corrupt-row' : ''}`;
 
             const badgeTextMap = {
                 ja: {
@@ -689,20 +698,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const fileDisplay = `${escapeHtml(item.src_dir)}/${escapeHtml(item.filename)}`;
             const destEscaped = escapeHtml(destDisplay);
+            const warningHtml = item.warning ? `
+                <div class="preview-warning${isCorrupt ? ' corrupt' : ''}">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                    <span>${escapeHtml(item.warning.message)}</span>
+                </div>
+            ` : '';
             const hasThumbSource = Boolean(item.full_path && item.src_dir_full);
             const thumbHtml = hasThumbSource
                 ? `<img class="preview-thumb" alt="" data-full-path="${escapeHtml(item.full_path)}" data-src-dir="${escapeHtml(item.src_dir_full)}">`
                 : `<div class="preview-thumb preview-thumb-placeholder"><i class="fa-regular fa-image"></i></div>`;
             row.innerHTML = `
-                ${thumbHtml}
-                <div class="preview-file" title="${fileDisplay}">
-                    ${fileDisplay}
+                <div class="preview-row-main">
+                    ${thumbHtml}
+                    <div class="preview-file" title="${fileDisplay}">
+                        ${fileDisplay}
+                    </div>
+                    <div class="preview-details">
+                        <span class="p-badge ${escapeHtml(badgeClass)}">${escapeHtml(badgeText)}</span>
+                        <i class="fa-solid fa-arrow-right-long preview-arrow"></i>
+                        <span class="preview-dest-folder" title="${destEscaped}">${destEscaped}</span>
+                    </div>
                 </div>
-                <div class="preview-details">
-                    <span class="p-badge ${escapeHtml(badgeClass)}">${escapeHtml(badgeText)}</span>
-                    <i class="fa-solid fa-arrow-right-long preview-arrow"></i>
-                    <span class="preview-dest-folder" title="${destEscaped}">${destEscaped}</span>
-                </div>
+                ${warningHtml}
             `;
             previewList.appendChild(row);
 

@@ -12,7 +12,7 @@ from services.file_service import (
     safe_move,
     validate_path_in_dst,
 )
-from utils.date_utils import get_exif_date
+from utils.date_utils import get_exif_date, get_exif_validation
 from utils.i18n import get_txt
 
 # Thread-safe cancellation event
@@ -213,10 +213,36 @@ def process_file_task(
 
     try:
         # EXIF優先、なければ更新日時
-        dt = get_exif_date(src_path)
+        # Also performs corrupt-file / abnormal-date sanity checks (issue #32).
+        # These are informational only: a flagged file still gets the same
+        # date/fallback treatment as any other file so behavior for
+        # non-flagged files is unaffected.
+        validation = get_exif_validation(src_path)
+        dt = validation["dt"]
         if not dt:
             mtime = os.path.getmtime(src_path)
             dt = datetime.fromtimestamp(mtime)
+
+        warning = None
+        if validation["corrupt"]:
+            warning = {
+                "type": "corrupt",
+                "message": get_txt(
+                    lang, "warning_corrupt_file", detail=validation["corrupt_detail"]
+                ),
+            }
+        elif validation["abnormal_date"]:
+            reason_key = (
+                "warning_future_date"
+                if validation["abnormal_reason"] == "future"
+                else "warning_old_date"
+            )
+            warning = {
+                "type": "abnormal_date",
+                "message": get_txt(
+                    lang, reason_key, date=validation["dt"].strftime("%Y-%m-%d")
+                ),
+            }
 
         # Apply legacy rules or custom naming templates
         if "%" in naming_rule:
@@ -312,6 +338,7 @@ def process_file_task(
                     action, f"Planned: {src_dirname}/{filename} -> {folder_name}/"
                 ),
                 "log_type": log_type_map.get(action, "info"),
+                "warning": warning,
             }
 
         if local_cancel_event.is_set():
@@ -420,6 +447,7 @@ def process_file_task(
             "copied": copied,
             "message": message,
             "log_type": log_type,
+            "warning": warning,
         }
 
     except Exception as e:
@@ -573,6 +601,11 @@ def arrange_photos(
                     error_count += 1
 
                 logging.info(res["message"])
+                if res.get("warning"):
+                    logging.warning(
+                        f"{res.get('src_dir')}/{res.get('filename')}: "
+                        f"{res['warning']['message']}"
+                    )
             elif res["status"] == "db_error":
                 # File was processed but DB logging failed — Undo will not cover this file
                 act = res.get("action")
@@ -594,6 +627,7 @@ def arrange_photos(
                 "progress": progress,
                 "message": res.get("message"),
                 "log_type": res.get("log_type", "info"),
+                "warning": res.get("warning"),
                 "stats": {
                     "total": total_files,
                     "copied": copied_count,

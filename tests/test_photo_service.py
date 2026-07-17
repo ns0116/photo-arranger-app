@@ -179,6 +179,90 @@ def test_process_file_task_exception_handling(temp_workspace):
     assert "エラー" in res["message"]
 
 
+def test_process_file_task_flags_corrupt_file(temp_workspace, image_creator):
+    """A corrupt/undecodable image is still processed (using the mtime fallback)
+    but the result carries a 'corrupt' warning for the Dry Run preview (#32)."""
+    src = temp_workspace["src"]
+    dst = temp_workspace["dst"]
+    image_creator(os.path.join(src, "corrupt.jpg"), content=b"not a valid jpeg at all")
+
+    cancel_ev = threading.Event()
+    res = process_file_task(
+        src, "corrupt.jpg", dst, "%Y-%m-%d", "copy", True, cancel_ev
+    )
+
+    assert res["status"] == "success"
+    assert res["action"] == "copy"
+    assert res["warning"] is not None
+    assert res["warning"]["type"] == "corrupt"
+
+
+def test_process_file_task_flags_future_exif_date(temp_workspace, image_creator):
+    """A valid image whose EXIF date is in the future is flagged, but still
+    processed normally into the (future-dated) folder."""
+    src = temp_workspace["src"]
+    dst = temp_workspace["dst"]
+    image_creator(os.path.join(src, "future.jpg"), exif_date_str="2099:01:01 12:00:00")
+
+    cancel_ev = threading.Event()
+    res = process_file_task(src, "future.jpg", dst, "%Y-%m-%d", "copy", True, cancel_ev)
+
+    assert res["status"] == "success"
+    assert res["folder"] == "2099-01-01"
+    assert res["warning"] is not None
+    assert res["warning"]["type"] == "abnormal_date"
+
+
+def test_process_file_task_flags_epoch_exif_date(temp_workspace, image_creator):
+    """A valid image with the classic epoch (1970-01-01) EXIF bug is flagged."""
+    src = temp_workspace["src"]
+    dst = temp_workspace["dst"]
+    image_creator(os.path.join(src, "epoch.jpg"), exif_date_str="1970:01:01 00:00:00")
+
+    cancel_ev = threading.Event()
+    res = process_file_task(src, "epoch.jpg", dst, "%Y-%m-%d", "copy", True, cancel_ev)
+
+    assert res["status"] == "success"
+    assert res["warning"] is not None
+    assert res["warning"]["type"] == "abnormal_date"
+
+
+def test_process_file_task_no_warning_for_normal_file(temp_workspace, image_creator):
+    """A normal, valid image with a plausible EXIF date must not be flagged."""
+    src = temp_workspace["src"]
+    dst = temp_workspace["dst"]
+    image_creator(os.path.join(src, "photo.jpg"), exif_date_str="2026:06:01 12:00:00")
+
+    cancel_ev = threading.Event()
+    res = process_file_task(src, "photo.jpg", dst, "%Y-%m-%d", "copy", True, cancel_ev)
+
+    assert res["status"] == "success"
+    assert res["warning"] is None
+
+
+def test_process_file_task_actual_run_copies_corrupt_file(
+    temp_workspace, image_creator
+):
+    """Corrupt files are not silently dropped: the actual (non-dry-run) copy
+    still succeeds, with the warning surfaced alongside the result."""
+    src = temp_workspace["src"]
+    dst = temp_workspace["dst"]
+    filepath = os.path.join(src, "corrupt.jpg")
+    image_creator(filepath, content=b"not a valid jpeg at all")
+
+    cancel_ev = threading.Event()
+    res = process_file_task(
+        src, "corrupt.jpg", dst, "%Y-%m-%d", "copy", False, cancel_ev
+    )
+
+    assert res["status"] == "success"
+    assert res["copied"] is True
+    assert res["warning"] is not None
+    assert res["warning"]["type"] == "corrupt"
+    # The file physically exists at the mtime-based fallback destination.
+    assert os.path.exists(os.path.join(dst, res["folder"], "corrupt.jpg"))
+
+
 def test_arrange_photos_pipeline_integration(temp_workspace, image_creator):
     """Test arrange_photos runs end-to-end and streams proper SSE JSON objects."""
     src = temp_workspace["src"]
