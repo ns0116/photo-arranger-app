@@ -41,6 +41,24 @@ def test_process_file_task_dry_run_copy(temp_workspace, image_creator):
     assert not os.path.exists(os.path.join(dst, "2026-06-01", "photo.jpg"))
 
 
+def test_process_file_task_dry_run_includes_full_path(temp_workspace, image_creator):
+    """Test process_file_task dry-run result exposes the absolute source path.
+
+    The frontend needs this to request a thumbnail preview (Issue #24) since the
+    displayed 'src_dir' field is only the basename of the source directory.
+    """
+    src = temp_workspace["src"]
+    dst = temp_workspace["dst"]
+    filepath = os.path.join(src, "photo.jpg")
+    image_creator(filepath, exif_date_str="2026:06:01 12:00:00")
+
+    cancel_ev = threading.Event()
+    res = process_file_task(src, "photo.jpg", dst, "%Y-%m-%d", "copy", True, cancel_ev)
+
+    assert res["full_path"] == filepath
+    assert res["src_dir_full"] == src
+
+
 def test_process_file_task_dry_run_move(temp_workspace, image_creator):
     """Test process_file_task simulates move without modifying files."""
     src = temp_workspace["src"]
