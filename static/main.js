@@ -120,6 +120,50 @@ document.addEventListener('DOMContentLoaded', () => {
     let simulationResults = [];
     let currentLang = 'ja';
     let lastReportData = null;
+    let thumbObjectUrls = [];
+
+    // Lazily fetches and displays thumbnails for the Dry Run preview list once a
+    // row scrolls into view, avoiding upfront requests for every result.
+    const thumbObserver = ('IntersectionObserver' in window)
+        ? new IntersectionObserver((entries, obs) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    obs.unobserve(entry.target);
+                    loadThumbnail(entry.target);
+                }
+            });
+        }, { root: previewList, rootMargin: '100px' })
+        : null;
+
+    async function loadThumbnail(imgEl) {
+        const fullPath = imgEl.dataset.fullPath;
+        const srcDir = imgEl.dataset.srcDir;
+        if (!fullPath || !srcDir) {
+            imgEl.classList.add('thumb-error');
+            return;
+        }
+        try {
+            const params = new URLSearchParams();
+            params.set('path', fullPath);
+            params.append('src_dir', srcDir);
+            const response = await fetch(`/api/thumbnail?${params.toString()}`, {
+                headers: { 'X-CSRF-Token': getCsrfToken() },
+            });
+            if (!response.ok) throw new Error('thumbnail unavailable');
+            const blob = await response.blob();
+            const objectUrl = URL.createObjectURL(blob);
+            thumbObjectUrls.push(objectUrl);
+            imgEl.src = objectUrl;
+            imgEl.classList.add('loaded');
+        } catch (error) {
+            imgEl.classList.add('thumb-error');
+        }
+    }
+
+    function clearThumbnailUrls() {
+        thumbObjectUrls.forEach(url => URL.revokeObjectURL(url));
+        thumbObjectUrls = [];
+    }
 
     // Toggle mode buttons
     const toggleOptions = document.querySelectorAll('.toggle-option');
@@ -348,6 +392,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (dryRun) {
             previewCard.classList.add('hidden');
+            clearThumbnailUrls();
             previewList.innerHTML = '';
             addLog(currentLang === 'ja' ? 'シミュレーション（Dry Run）を開始します...' : 'Starting simulation (Dry Run)...', 'info');
         } else {
@@ -517,6 +562,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderSimulationPreview() {
         previewCard.classList.remove('hidden');
         previewCount.textContent = `${simulationResults.length} ${currentLang === 'ja' ? '件' : 'items'}`;
+        clearThumbnailUrls();
         previewList.innerHTML = '';
 
         simulationResults.forEach(item => {
@@ -552,7 +598,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const fileDisplay = `${escapeHtml(item.src_dir)}/${escapeHtml(item.filename)}`;
             const destEscaped = escapeHtml(destDisplay);
+            const hasThumbSource = Boolean(item.full_path && item.src_dir_full);
+            const thumbHtml = hasThumbSource
+                ? `<img class="preview-thumb" alt="" data-full-path="${escapeHtml(item.full_path)}" data-src-dir="${escapeHtml(item.src_dir_full)}">`
+                : `<div class="preview-thumb preview-thumb-placeholder"><i class="fa-regular fa-image"></i></div>`;
             row.innerHTML = `
+                ${thumbHtml}
                 <div class="preview-file" title="${fileDisplay}">
                     ${fileDisplay}
                 </div>
@@ -563,6 +614,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             `;
             previewList.appendChild(row);
+
+            if (hasThumbSource) {
+                const thumbEl = row.querySelector('.preview-thumb');
+                if (thumbObserver) {
+                    thumbObserver.observe(thumbEl);
+                } else {
+                    loadThumbnail(thumbEl);
+                }
+            }
         });
     }
 

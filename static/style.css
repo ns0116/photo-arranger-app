@@ -705,6 +705,37 @@ footer {
     border-radius: 6px;
     font-size: 0.8rem;
     border-left: 3px solid transparent;
+    gap: 0.6rem;
+}
+
+/* Dry Run thumbnail preview (Issue #24) */
+.preview-thumb {
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    object-fit: cover;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.preview-thumb.loaded {
+    opacity: 1;
+}
+
+.preview-thumb.thumb-error {
+    opacity: 0.35;
+}
+
+.preview-thumb-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    opacity: 1;
 }
 
 .preview-file {
@@ -713,6 +744,8 @@ footer {
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 45%;
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 .preview-details {
