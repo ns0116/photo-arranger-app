@@ -1,5 +1,6 @@
 from routes.arrange import arrange_bp
 from routes.directories import directories_bp
+from routes.report import report_bp
 from routes.system import system_bp
 
 
@@ -8,3 +9,4 @@ def init_routes(app):
     app.register_blueprint(system_bp)
     app.register_blueprint(arrange_bp)
     app.register_blueprint(directories_bp)
+    app.register_blueprint(report_bp)

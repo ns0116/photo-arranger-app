@@ -120,6 +120,51 @@ def get_latest_session():
         return dict(row) if row else None
 
 
+def get_report_stats():
+    """Aggregates arrange activity for the report/statistics screen.
+
+    Buckets sessions by the month they were executed (session.timestamp) and
+    joins each session's file_history rows to compute per-month totals.
+
+    Notes on scope:
+    - File/size counts only include file_history rows with status='active',
+      so files that were later reverted via Undo are excluded from the
+      "organized files" totals (they no longer represent organized state).
+    - Session counts include every registered session (even ones later
+      undone), since a session still represents an arrangement run that
+      took place.
+    - A LEFT JOIN is used so months with sessions that produced zero active
+      file records (e.g. an errored or fully-undone run) still appear.
+    """
+    with db_session() as conn:
+        cursor = conn.execute(
+            """
+            SELECT
+                strftime('%Y-%m', s.timestamp) AS month,
+                COUNT(DISTINCT s.session_id) AS sessions,
+                COALESCE(SUM(CASE WHEN fh.status = 'active' THEN 1 ELSE 0 END), 0) AS total_files,
+                COALESCE(SUM(CASE WHEN fh.status = 'active' AND s.mode = 'copy' THEN 1 ELSE 0 END), 0) AS copy_files,
+                COALESCE(SUM(CASE WHEN fh.status = 'active' AND s.mode = 'move' THEN 1 ELSE 0 END), 0) AS move_files,
+                COALESCE(SUM(CASE WHEN fh.status = 'active' THEN fh.file_size ELSE 0 END), 0) AS total_size
+            FROM sessions s
+            LEFT JOIN file_history fh ON fh.session_id = s.session_id
+            GROUP BY month
+            ORDER BY month
+            """
+        )
+        monthly = [dict(row) for row in cursor.fetchall()]
+
+        totals = {
+            "total_sessions": sum(m["sessions"] for m in monthly),
+            "total_files": sum(m["total_files"] for m in monthly),
+            "copy_files": sum(m["copy_files"] for m in monthly),
+            "move_files": sum(m["move_files"] for m in monthly),
+            "total_size": sum(m["total_size"] for m in monthly),
+        }
+
+        return {"totals": totals, "monthly": monthly}
+
+
 def mark_session_undone(session_id):
     """Marks a session and its associated file logs as undone/reversed in the database."""
     with db_session() as conn:
