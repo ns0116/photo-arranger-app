@@ -44,7 +44,26 @@
                 <div class="card-header">
                     <h2><i class="fa-solid fa-sliders"></i> 設定</h2>
                 </div>
-                
+
+                <!-- 設定プロファイル -->
+                <div class="form-group">
+                    <label for="profile-select" id="lbl-profile">
+                        <i class="fa-solid fa-user-gear"></i> 設定プロファイル
+                    </label>
+                    <select id="profile-select" class="form-select"></select>
+                    <div class="profile-actions">
+                        <button type="button" id="btn-profile-save" class="btn btn-secondary flex-1" title="現在の設定を選択中のプロファイルに上書き保存します">
+                            <i class="fa-solid fa-floppy-disk"></i> <span id="btn-profile-save-text">保存</span>
+                        </button>
+                        <button type="button" id="btn-profile-save-as" class="btn btn-outline flex-1" title="現在の設定を新しい名前のプロファイルとして保存します">
+                            <i class="fa-solid fa-plus"></i> <span id="btn-profile-save-as-text">新規保存</span>
+                        </button>
+                        <button type="button" id="btn-profile-delete" class="btn btn-danger" title="選択中のプロファイルを削除します">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </div>
+                </div>
+
                 <!-- 複数ソースディレクトリ -->
                 <div class="form-group">
                     <label>
@@ -251,6 +270,7 @@
     <div id="app-modal" class="modal-overlay hidden" role="dialog" aria-modal="true">
         <div class="modal-box">
             <p id="modal-message" class="modal-message"></p>
+            <input type="text" id="modal-input" class="modal-input hidden" spellcheck="false">
             <div class="modal-actions">
                 <button id="modal-ok" class="btn btn-primary">OK</button>
                 <button id="modal-cancel" class="btn btn-secondary hidden">キャンセル</button>

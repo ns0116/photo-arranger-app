@@ -48,9 +48,45 @@ function showConfirm(message, cancelLabel) {
     });
 }
 
-const STORAGE_KEY = 'photoArrangerSettings';
+function showPrompt(message, defaultValue, cancelLabel) {
+    return new Promise(resolve => {
+        const overlay = document.getElementById('app-modal');
+        const msgEl = document.getElementById('modal-message');
+        const inputEl = document.getElementById('modal-input');
+        const okBtn = document.getElementById('modal-ok');
+        const cancelBtn = document.getElementById('modal-cancel');
+        msgEl.textContent = message;
+        inputEl.value = defaultValue || '';
+        inputEl.classList.remove('hidden');
+        cancelBtn.textContent = cancelLabel || 'キャンセル';
+        cancelBtn.classList.remove('hidden');
+        overlay.classList.remove('hidden');
+        inputEl.focus();
+        const onOk = () => { const val = inputEl.value.trim(); cleanup(); resolve(val || null); };
+        const onCancel = () => { cleanup(); resolve(null); };
+        const onKeydown = (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); onOk(); }
+            else if (e.key === 'Escape') { onCancel(); }
+        };
+        const cleanup = () => {
+            overlay.classList.add('hidden');
+            inputEl.classList.add('hidden');
+            okBtn.removeEventListener('click', onOk);
+            cancelBtn.removeEventListener('click', onCancel);
+            inputEl.removeEventListener('keydown', onKeydown);
+        };
+        okBtn.addEventListener('click', onOk);
+        cancelBtn.addEventListener('click', onCancel);
+        inputEl.addEventListener('keydown', onKeydown);
+    });
+}
 
-function saveSettings() {
+// Legacy single-profile key, kept only as a migration source (issue #31).
+const STORAGE_KEY = 'photoArrangerSettings';
+// New multi-profile storage key: { activeProfile, profiles: [{ name, settings }] }
+const PROFILES_KEY = 'photoArrangerProfiles';
+
+function getCurrentFormSettings() {
     const srcDirInputs = document.querySelectorAll('.src-dir-input');
     const srcDirs = Array.from(srcDirInputs).map(i => i.value);
     const dstDir = document.getElementById('dst-dir') ? document.getElementById('dst-dir').value : '';
@@ -64,10 +100,60 @@ function saveSettings() {
     const mode = modeEl ? modeEl.getAttribute('data-value') : 'copy';
     const recursiveEl = document.getElementById('recursive-scan');
     const recursive = recursiveEl ? recursiveEl.checked : false;
+    const lang = document.querySelector('.lang-option.active');
+    const language = lang ? (lang.id === 'btn-lang-en' ? 'en' : 'ja') : 'ja';
+    return { srcDirs, dstDir, namingRule, customTemplate, extensions, dateStart, dateEnd, mode, language, recursive };
+}
+
+function loadProfilesStore() {
     try {
-        const lang = document.querySelector('.lang-option.active');
-        const language = lang ? (lang.id === 'btn-lang-en' ? 'en' : 'ja') : 'ja';
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ srcDirs, dstDir, namingRule, customTemplate, extensions, dateStart, dateEnd, mode, language, recursive }));
+        const raw = localStorage.getItem(PROFILES_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || !Array.isArray(parsed.profiles) || parsed.profiles.length === 0) return null;
+        return parsed;
+    } catch (e) {
+        return null;
+    }
+}
+
+function saveProfilesStore(store) {
+    try {
+        localStorage.setItem(PROFILES_KEY, JSON.stringify(store));
+    } catch (e) { /* storage unavailable */ }
+}
+
+// Migrates the legacy single-profile localStorage format (pre-#31) into the
+// new named-profiles format, wrapping any existing settings into a single
+// "Default"/"デフォルト" profile so returning users don't lose their settings.
+function migrateLegacySettingsIfNeeded() {
+    const existing = loadProfilesStore();
+    if (existing) return existing;
+
+    let legacySettings = null;
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) legacySettings = JSON.parse(raw);
+    } catch (e) { /* corrupt legacy data - ignore */ }
+
+    const language = legacySettings && legacySettings.language === 'en' ? 'en' : 'ja';
+    const defaultName = language === 'en' ? 'Default' : 'デフォルト';
+
+    const store = {
+        activeProfile: defaultName,
+        profiles: [{ name: defaultName, settings: legacySettings || getCurrentFormSettings() }]
+    };
+    saveProfilesStore(store);
+    return store;
+}
+
+function saveSettings() {
+    try {
+        const store = loadProfilesStore() || migrateLegacySettingsIfNeeded();
+        const idx = store.profiles.findIndex(p => p.name === store.activeProfile);
+        if (idx === -1) return;
+        store.profiles[idx].settings = getCurrentFormSettings();
+        saveProfilesStore(store);
     } catch (e) { /* storage unavailable */ }
 }
 
@@ -83,7 +169,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnCancel = document.getElementById('btn-cancel');
     const btnShutdown = document.getElementById('btn-shutdown');
     const namingRuleSelect = document.getElementById('naming-rule');
-    
+
+    const profileSelect = document.getElementById('profile-select');
+    const btnProfileSave = document.getElementById('btn-profile-save');
+    const btnProfileSaveAs = document.getElementById('btn-profile-save-as');
+    const btnProfileDelete = document.getElementById('btn-profile-delete');
+
     const progressCard = document.getElementById('progress-card');
     const progressPercent = document.getElementById('progress-percent');
     const progressBar = document.getElementById('progress-bar');
@@ -600,6 +691,16 @@ document.addEventListener('DOMContentLoaded', () => {
         ja: {
             'subtitle-text': 'EXIF撮影日時とファイル更新日時を自動解析して写真を整理します',
             'setup-title': '設定',
+            'lbl-profile': '設定プロファイル',
+            'btn-profile-save': '保存',
+            'btn-profile-save-title': '現在の設定を選択中のプロファイルに上書き保存します',
+            'btn-profile-save-as': '新規保存',
+            'btn-profile-save-as-title': '現在の設定を新しい名前のプロファイルとして保存します',
+            'btn-profile-delete-title': '選択中のプロファイルを削除します',
+            'prompt-profile-name': '保存するプロファイル名を入力してください',
+            'confirm-profile-overwrite': '「{name}」は既に存在します。上書きしますか？',
+            'confirm-profile-delete': '「{name}」を削除しますか？',
+            'error-profile-last': '最低1つのプロファイルが必要なため、これ以上削除できません。',
             'lbl-src-dirs': 'コピー元ディレクトリ',
             'placeholder-src': '整理する写真が入っているフォルダのパス',
             'btn-select': '選択',
@@ -637,6 +738,16 @@ document.addEventListener('DOMContentLoaded', () => {
         en: {
             'subtitle-text': 'Automatically organize photos into date folders using EXIF metadata and file mtimes',
             'setup-title': 'Settings',
+            'lbl-profile': 'Settings Profile',
+            'btn-profile-save': 'Save',
+            'btn-profile-save-title': 'Overwrite the selected profile with the current settings',
+            'btn-profile-save-as': 'Save As New',
+            'btn-profile-save-as-title': 'Save the current settings as a new named profile',
+            'btn-profile-delete-title': 'Delete the selected profile',
+            'prompt-profile-name': 'Enter a name for this profile',
+            'confirm-profile-overwrite': 'A profile named "{name}" already exists. Overwrite it?',
+            'confirm-profile-delete': 'Delete profile "{name}"?',
+            'error-profile-last': 'At least one profile is required, so this one cannot be deleted.',
             'lbl-src-dirs': 'Source Directory',
             'placeholder-src': 'Path to folder containing photos to organize',
             'btn-select': 'Select',
@@ -697,6 +808,18 @@ document.addEventListener('DOMContentLoaded', () => {
         // Update texts
         document.getElementById('subtitle-text').textContent = dict['subtitle-text'];
         document.querySelector('.setup-card .card-header h2').innerHTML = `<i class="fa-solid fa-sliders"></i> ${dict['setup-title']}`;
+
+        document.getElementById('lbl-profile').innerHTML = `<i class="fa-solid fa-user-gear"></i> ${dict['lbl-profile']}`;
+        // The save/save-as buttons briefly swap to an icon-only checkmark after a
+        // click (see flashButtonSuccess), so their text spans may not exist yet.
+        const profileSaveTextEl = document.getElementById('btn-profile-save-text');
+        if (profileSaveTextEl) profileSaveTextEl.textContent = dict['btn-profile-save'];
+        const profileSaveAsTextEl = document.getElementById('btn-profile-save-as-text');
+        if (profileSaveAsTextEl) profileSaveAsTextEl.textContent = dict['btn-profile-save-as'];
+        btnProfileSave.title = dict['btn-profile-save-title'];
+        btnProfileSaveAs.title = dict['btn-profile-save-as-title'];
+        btnProfileDelete.title = dict['btn-profile-delete-title'];
+
         document.querySelector('label[for="dst-dir"]').innerHTML = `<i class="fa-solid fa-folder-open"></i> ${dict['lbl-dst-dir']}`;
         dstDirInput.placeholder = dict['placeholder-dst'];
         document.querySelector('.form-group label:not([for])').innerHTML = `<i class="fa-solid fa-gears"></i> ${dict['lbl-mode']}`;
@@ -753,20 +876,24 @@ document.addEventListener('DOMContentLoaded', () => {
     btnLangJa.addEventListener('click', () => { setLanguage('ja'); saveSettings(); });
     btnLangEn.addEventListener('click', () => { setLanguage('en'); saveSettings(); });
 
-    function loadSettings() {
+    // Applies a saved settings object (one profile's worth) onto the form.
+    // Used both for the initial page load and whenever the user switches profiles.
+    function applySettingsToForm(s) {
+        if (!s) return;
         try {
-            const raw = localStorage.getItem(STORAGE_KEY);
-            if (!raw) return;
-            const s = JSON.parse(raw);
-
             // Restore language first so placeholders render correctly
             if (s.language) setLanguage(s.language);
 
-            // Restore source directories
+            // Reset source directory rows down to a single blank row before restoring
+            const existingRows = srcDirsContainer.querySelectorAll('.src-dir-row');
+            existingRows.forEach((row, idx) => { if (idx > 0) row.remove(); });
+            const firstInput = srcDirsContainer.querySelector('.src-dir-input');
+            if (firstInput) firstInput.value = '';
+
             if (Array.isArray(s.srcDirs) && s.srcDirs.length > 0) {
-                const rows = srcDirsContainer.querySelectorAll('.src-dir-row');
                 s.srcDirs.forEach((dir, idx) => {
                     if (idx === 0) {
+                        const rows = srcDirsContainer.querySelectorAll('.src-dir-row');
                         const input = rows[0] && rows[0].querySelector('.src-dir-input');
                         if (input) input.value = dir;
                     } else if (dir) {
@@ -777,42 +904,130 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 });
             }
+            updateRemoveButtonsVisibility();
 
-            if (s.dstDir) dstDirInput.value = s.dstDir;
+            dstDirInput.value = s.dstDir || '';
 
-            if (s.namingRule) {
-                const select = document.getElementById('naming-rule');
-                select.value = s.namingRule;
-                const customGroup = document.getElementById('custom-template-group');
-                if (s.namingRule === 'custom') {
-                    customGroup.classList.remove('hidden');
-                    if (s.customTemplate) document.getElementById('custom-template').value = s.customTemplate;
-                } else {
-                    customGroup.classList.add('hidden');
-                }
+            const namingSelect = document.getElementById('naming-rule');
+            namingSelect.value = s.namingRule || 'YYYY-MM-DD';
+            const customGroup = document.getElementById('custom-template-group');
+            if (namingSelect.value === 'custom') {
+                customGroup.classList.remove('hidden');
+                document.getElementById('custom-template').value = s.customTemplate || '';
+            } else {
+                customGroup.classList.add('hidden');
             }
 
-            if (s.mode) {
-                toggleOptions.forEach(opt => {
-                    if (opt.getAttribute('data-value') === s.mode) {
-                        opt.click();
-                    }
-                });
-            }
+            document.querySelectorAll('input[name="extensions"]').forEach(cb => {
+                cb.checked = Array.isArray(s.extensions) && s.extensions.includes(cb.value);
+            });
 
-            if (Array.isArray(s.extensions)) {
-                document.querySelectorAll('input[name="extensions"]').forEach(cb => {
-                    cb.checked = s.extensions.includes(cb.value);
-                });
-            }
-
-            if (s.dateStart) document.getElementById('date-start').value = s.dateStart;
-            if (s.dateEnd) document.getElementById('date-end').value = s.dateEnd;
+            document.getElementById('date-start').value = s.dateStart || '';
+            document.getElementById('date-end').value = s.dateEnd || '';
 
             const recursiveEl = document.getElementById('recursive-scan');
-            if (recursiveEl && s.recursive !== undefined) recursiveEl.checked = s.recursive;
-        } catch (e) { /* corrupt storage — ignore */ }
+            if (recursiveEl) recursiveEl.checked = !!s.recursive;
+
+            // Apply mode last: the toggle's click handler also calls saveSettings(),
+            // so by the time it fires the rest of the form already reflects this profile.
+            const targetMode = s.mode || 'copy';
+            toggleOptions.forEach(opt => {
+                if (opt.getAttribute('data-value') === targetMode) {
+                    opt.click();
+                }
+            });
+        } catch (e) { /* corrupt profile data — ignore */ }
     }
 
-    loadSettings();
+    function populateProfileSelect(store) {
+        profileSelect.innerHTML = '';
+        store.profiles.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.name;
+            opt.textContent = p.name;
+            profileSelect.appendChild(opt);
+        });
+        profileSelect.value = store.activeProfile;
+    }
+
+    function switchProfile(name) {
+        const store = loadProfilesStore();
+        if (!store) return;
+        const profile = store.profiles.find(p => p.name === name);
+        if (!profile) return;
+        store.activeProfile = name;
+        saveProfilesStore(store);
+        applySettingsToForm(profile.settings);
+    }
+
+    function flashButtonSuccess(btn) {
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-check"></i>';
+        setTimeout(() => {
+            btn.innerHTML = original;
+            btn.disabled = false;
+        }, 1200);
+    }
+
+    profileSelect.addEventListener('change', () => {
+        switchProfile(profileSelect.value);
+    });
+
+    btnProfileSave.addEventListener('click', () => {
+        saveSettings();
+        flashButtonSuccess(btnProfileSave);
+    });
+
+    btnProfileSaveAs.addEventListener('click', async () => {
+        const dict = uiStrings[currentLang];
+        const cancelLbl = currentLang === 'ja' ? 'キャンセル' : 'Cancel';
+        const name = await showPrompt(dict['prompt-profile-name'], '', cancelLbl);
+        if (!name) return;
+
+        const store = loadProfilesStore() || migrateLegacySettingsIfNeeded();
+        const existingIdx = store.profiles.findIndex(p => p.name === name);
+        if (existingIdx !== -1) {
+            const overwriteMsg = dict['confirm-profile-overwrite'].replace('{name}', name);
+            if (!await showConfirm(overwriteMsg, cancelLbl)) return;
+            store.profiles[existingIdx].settings = getCurrentFormSettings();
+        } else {
+            store.profiles.push({ name, settings: getCurrentFormSettings() });
+        }
+        store.activeProfile = name;
+        saveProfilesStore(store);
+        populateProfileSelect(store);
+        flashButtonSuccess(btnProfileSaveAs);
+    });
+
+    btnProfileDelete.addEventListener('click', async () => {
+        const dict = uiStrings[currentLang];
+        const cancelLbl = currentLang === 'ja' ? 'キャンセル' : 'Cancel';
+        const store = loadProfilesStore();
+        if (!store) return;
+
+        if (store.profiles.length <= 1) {
+            await showAlert(dict['error-profile-last']);
+            return;
+        }
+
+        const name = store.activeProfile;
+        const confirmMsg = dict['confirm-profile-delete'].replace('{name}', name);
+        if (!await showConfirm(confirmMsg, cancelLbl)) return;
+
+        store.profiles = store.profiles.filter(p => p.name !== name);
+        store.activeProfile = store.profiles[0].name;
+        saveProfilesStore(store);
+        populateProfileSelect(store);
+        applySettingsToForm(store.profiles[0].settings);
+    });
+
+    function initProfiles() {
+        const store = migrateLegacySettingsIfNeeded();
+        populateProfileSelect(store);
+        const active = store.profiles.find(p => p.name === store.activeProfile) || store.profiles[0];
+        if (active) applySettingsToForm(active.settings);
+    }
+
+    initProfiles();
 });
