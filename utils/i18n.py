@@ -23,6 +23,9 @@ TRANSLATIONS = {
         "skip_db_success": "スキップ（データベース重複）: {dir}/{file} (既に {target} として整理済みです)",
         "done_dryrun": "シミュレーション完了: 合計 {total} 件 (完了/予定: {copied} 件, スキップ: {skipped} 件, エラー: {errors} 件)",
         "done_arrange": "処理完了: 合計 {total} 件 (完了/予定: {copied} 件, スキップ: {skipped} 件, エラー: {errors} 件)",
+        "warning_corrupt_file": "画像を読み込めませんでした（破損している可能性があります）: {detail}",
+        "warning_future_date": "EXIF撮影日時が未来の日付です（{date}）。カメラの時計設定をご確認ください。",
+        "warning_old_date": "EXIF撮影日時が異常に古い日付です（{date}）。EXIF情報が破損している可能性があります。",
     },
     "en": {
         "start_dryrun": "Starting simulation (Dry Run)...",
@@ -46,6 +49,9 @@ TRANSLATIONS = {
         "skip_db_success": "Skip (DB Duplicate): {dir}/{file} (already organized as {target})",
         "done_dryrun": "Simulation Completed: Total {total} (Success: {copied}, Skip: {skipped}, Error: {errors})",
         "done_arrange": "Arrangement Completed: Total {total} (Success: {copied}, Skip: {skipped}, Error: {errors})",
+        "warning_corrupt_file": "Failed to decode image (it may be corrupted): {detail}",
+        "warning_future_date": "EXIF date taken is in the future ({date}). Please check the camera's clock settings.",
+        "warning_old_date": "EXIF date taken is unrealistically old ({date}). The EXIF data may be corrupted.",
     },
 }
 

@@ -360,6 +360,8 @@ input[type="text"]:focus {
 .log-line.info { color: var(--info); }
 /* 修正 #16: リネーム時のログ行スタイルが欠落していたため追加 */
 .log-line.rename { color: #fbbf24; }
+/* Pre-flight sanity check warnings (corrupt files / abnormal EXIF dates, see #32) */
+.log-line.warning { color: #fbbf24; }
 
 /* Utilities */
 .hidden {
@@ -601,13 +603,19 @@ footer {
 
 .preview-row {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
+    flex-direction: column;
+    gap: 0.35rem;
     padding: 0.5rem 0.75rem;
     background: rgba(255, 255, 255, 0.02);
     border-radius: 6px;
     font-size: 0.8rem;
     border-left: 3px solid transparent;
+}
+
+.preview-row-main {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 .preview-file {
@@ -682,6 +690,38 @@ footer {
 .preview-row.skip-row { border-left-color: #9ca3af; }
 .preview-row.rename-row { border-left-color: #fbbf24; }
 .preview-row.error-row { border-left-color: #f87171; }
+
+/* Dry Run pre-flight warnings (corrupt files / abnormal EXIF dates, see #32) */
+.preview-row.has-warning { border-left-color: #fbbf24; }
+.preview-row.has-warning.corrupt-row { border-left-color: #f87171; }
+
+.preview-warning {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.72rem;
+    line-height: 1.3;
+    color: #fbbf24;
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    border-radius: 4px;
+    padding: 0.3rem 0.5rem;
+}
+
+.preview-warning i {
+    color: #fbbf24;
+    flex-shrink: 0;
+}
+
+.preview-warning.corrupt {
+    color: #f87171;
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.25);
+}
+
+.preview-warning.corrupt i {
+    color: #f87171;
+}
 
 /* Language switch styles */
 .lang-switch-container {

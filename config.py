@@ -1,6 +1,7 @@
 import logging
 import os
 import sys
+from datetime import datetime
 
 
 class Config:
@@ -19,6 +20,14 @@ class Config:
 
     # Rename attempts limit for name collisions
     MAX_RENAME_ATTEMPTS = 10000
+
+    # EXIF sanity-check thresholds (Dry Run pre-flight warnings — see issue #32).
+    # Any resolved date-taken older than this is considered implausible (also
+    # catches the common "epoch" bug of 1970-01-01 from bad EXIF/camera clocks).
+    EXIF_MIN_VALID_DATE = datetime(1980, 1, 1)
+    # Dates further in the future than this many minutes are treated as
+    # abnormal, allowing a small buffer for clock skew between machines.
+    EXIF_FUTURE_TOLERANCE_MINUTES = 5
 
     # Date rules configuration
     NAMING_RULES = {
