@@ -105,10 +105,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const logConsole = document.getElementById('log-console');
     const btnUndo = document.getElementById('btn-undo');
 
+    const reportEmpty = document.getElementById('report-empty');
+    const reportContent = document.getElementById('report-content');
+    const reportTotalSessions = document.getElementById('report-total-sessions');
+    const reportTotalFiles = document.getElementById('report-total-files');
+    const reportCopyFiles = document.getElementById('report-copy-files');
+    const reportMoveFiles = document.getElementById('report-move-files');
+    const reportTotalSize = document.getElementById('report-total-size');
+    const reportMonthlyList = document.getElementById('report-monthly-list');
+    const btnRefreshReport = document.getElementById('btn-refresh-report');
+
     // Current app state
     let selectedMode = 'copy'; // Default mode
     let simulationResults = [];
     let currentLang = 'ja';
+    let lastReportData = null;
     let thumbObjectUrls = [];
 
     // Lazily fetches and displays thumbnails for the Dry Run preview list once a
@@ -473,6 +484,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Show Undo button only on successful actual runs
                 if (!dryRun) {
                     btnUndo.classList.remove('hidden');
+                    loadReport(); // Refresh stats after files were actually organized
                 }
             } else {
                 progressIcon.className = 'fa-solid fa-circle-exclamation';
@@ -642,6 +654,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             await showAlert(data.message);
             btnUndo.classList.add('hidden'); // Hide undo button after rollback succeeds
+            loadReport(); // Refresh stats since the undo changed organized-file counts
         } catch (error) {
             console.error('Undo request failed:', error);
             addLog(`${currentLang === 'ja' ? 'Undo失敗' : 'Undo failed'}: ${error.message}`, 'error');
@@ -651,6 +664,90 @@ document.addEventListener('DOMContentLoaded', () => {
             btnUndo.innerHTML = `<i class="fa-solid fa-rotate-left"></i> ${uiStrings[currentLang]['lbl-undo']}`;
         }
     });
+
+    // Format a byte count into a human-readable string (B/KB/MB/GB/TB)
+    function formatBytes(bytes) {
+        if (!bytes || bytes <= 0) return '0 B';
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        let value = bytes;
+        let unitIndex = 0;
+        while (value >= 1024 && unitIndex < units.length - 1) {
+            value /= 1024;
+            unitIndex++;
+        }
+        return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+    }
+
+    // Render the report/statistics card from aggregated /api/report data
+    function renderReport(data) {
+        const totals = data.totals || {};
+        const monthly = data.monthly || [];
+
+        if (!totals.total_sessions && !totals.total_files) {
+            reportEmpty.classList.remove('hidden');
+            reportContent.classList.add('hidden');
+            return;
+        }
+
+        reportEmpty.classList.add('hidden');
+        reportContent.classList.remove('hidden');
+
+        reportTotalSessions.textContent = totals.total_sessions || 0;
+        reportTotalFiles.textContent = totals.total_files || 0;
+        reportCopyFiles.textContent = totals.copy_files || 0;
+        reportMoveFiles.textContent = totals.move_files || 0;
+        reportTotalSize.textContent = formatBytes(totals.total_size || 0);
+
+        reportMonthlyList.innerHTML = '';
+        const maxTotal = monthly.reduce((max, m) => Math.max(max, m.total_files || 0), 0) || 1;
+        const copyLabel = currentLang === 'ja' ? 'コピー' : 'Copy';
+        const moveLabel = currentLang === 'ja' ? '移動' : 'Move';
+        const filesUnit = currentLang === 'ja' ? '件' : 'files';
+
+        // Most recent month first
+        [...monthly].reverse().forEach(m => {
+            const totalFiles = m.total_files || 0;
+            const copyFiles = m.copy_files || 0;
+            const moveFiles = m.move_files || 0;
+            const copyPct = (copyFiles / maxTotal) * 100;
+            const movePct = (moveFiles / maxTotal) * 100;
+
+            const row = document.createElement('div');
+            row.className = 'report-month-row';
+            row.innerHTML = `
+                <div class="report-month-row-header">
+                    <span class="report-month-label">${escapeHtml(m.month || '-')}</span>
+                    <span class="report-month-count">${totalFiles} ${filesUnit} (${copyLabel} ${copyFiles} / ${moveLabel} ${moveFiles})</span>
+                </div>
+                <div class="report-bar-track">
+                    <div class="report-bar-copy" style="width:${copyPct}%"></div>
+                    <div class="report-bar-move" style="width:${movePct}%"></div>
+                </div>
+            `;
+            reportMonthlyList.appendChild(row);
+        });
+    }
+
+    // Fetch aggregated report data from the backend and render it
+    async function loadReport() {
+        try {
+            if (btnRefreshReport) btnRefreshReport.disabled = true;
+            const response = await fetch('/api/report');
+            const data = await response.json();
+            if (response.ok) {
+                lastReportData = data;
+                renderReport(data);
+            }
+        } catch (error) {
+            console.error('Failed to load report:', error);
+        } finally {
+            if (btnRefreshReport) btnRefreshReport.disabled = false;
+        }
+    }
+
+    if (btnRefreshReport) {
+        btnRefreshReport.addEventListener('click', loadReport);
+    }
 
     // i18n dynamic elements maps
     const btnLangJa = document.getElementById('btn-lang-ja');
@@ -692,7 +789,17 @@ document.addEventListener('DOMContentLoaded', () => {
             'shutdown-confirm': 'サーバーをシャットダウンしますか？終了すると再度起動するまでアプリは利用できなくなります。',
             'error-select-dirs': 'コピー元とコピー先のディレクトリを指定してください。',
             'shutdown-title-screen': 'サーバーを終了しました',
-            'shutdown-desc-screen': 'ブラウザのタブを閉じて問題ありません。'
+            'shutdown-desc-screen': 'ブラウザのタブを閉じて問題ありません。',
+            'title-report': 'レポート',
+            'lbl-refresh-report': '更新',
+            'text-report-empty': 'まだ整理履歴がありません。',
+            'lbl-report-sessions': '実行回数',
+            'lbl-report-total-files': '整理済ファイル',
+            'lbl-report-copy-files': 'コピー',
+            'lbl-report-move-files': '移動',
+            'lbl-report-total-size': '合計サイズ',
+            'lbl-legend-copy': 'コピー',
+            'lbl-legend-move': '移動'
         },
         en: {
             'subtitle-text': 'Automatically organize photos into date folders using EXIF metadata and file mtimes',
@@ -729,7 +836,17 @@ document.addEventListener('DOMContentLoaded', () => {
             'shutdown-confirm': 'Shutdown server? The app will become unavailable until started again.',
             'error-select-dirs': 'Please specify source and destination directories.',
             'shutdown-title-screen': 'Server Stopped',
-            'shutdown-desc-screen': 'You can safely close this browser tab.'
+            'shutdown-desc-screen': 'You can safely close this browser tab.',
+            'title-report': 'Report',
+            'lbl-refresh-report': 'Refresh',
+            'text-report-empty': 'No arrange history yet.',
+            'lbl-report-sessions': 'Runs',
+            'lbl-report-total-files': 'Files Organized',
+            'lbl-report-copy-files': 'Copied',
+            'lbl-report-move-files': 'Moved',
+            'lbl-report-total-size': 'Total Size',
+            'lbl-legend-copy': 'Copy',
+            'lbl-legend-move': 'Move'
         }
     };
 
@@ -808,6 +925,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 btn.innerHTML = `<i class="fa-solid fa-magnifying-glass"></i> ${dict['btn-select']}`;
             }
         });
+
+        // Report card
+        document.getElementById('title-report').textContent = dict['title-report'];
+        document.getElementById('lbl-refresh-report').textContent = dict['lbl-refresh-report'];
+        document.getElementById('text-report-empty').textContent = dict['text-report-empty'];
+        document.getElementById('lbl-report-sessions').textContent = dict['lbl-report-sessions'];
+        document.getElementById('lbl-report-total-files').textContent = dict['lbl-report-total-files'];
+        document.getElementById('lbl-report-copy-files').textContent = dict['lbl-report-copy-files'];
+        document.getElementById('lbl-report-move-files').textContent = dict['lbl-report-move-files'];
+        document.getElementById('lbl-report-total-size').textContent = dict['lbl-report-total-size'];
+        document.getElementById('lbl-legend-copy').textContent = dict['lbl-legend-copy'];
+        document.getElementById('lbl-legend-move').textContent = dict['lbl-legend-move'];
+        // Re-render the monthly breakdown so its inline copy/move labels follow the new language
+        if (lastReportData) renderReport(lastReportData);
     }
 
     btnLangJa.addEventListener('click', () => { setLanguage('ja'); saveSettings(); });
@@ -875,4 +1006,5 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     loadSettings();
+    loadReport();
 });
