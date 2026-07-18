@@ -918,7 +918,8 @@ document.addEventListener('DOMContentLoaded', () => {
             'lbl-report-move-files': '移動',
             'lbl-report-total-size': '合計サイズ',
             'lbl-legend-copy': 'コピー',
-            'lbl-legend-move': '移動'
+            'lbl-legend-move': '移動',
+            'lbl-recursive': 'サブフォルダも再帰的にスキャンする'
         },
         en: {
             'subtitle-text': 'Automatically organize photos into date folders using EXIF metadata and file mtimes',
@@ -975,7 +976,8 @@ document.addEventListener('DOMContentLoaded', () => {
             'lbl-report-move-files': 'Moved',
             'lbl-report-total-size': 'Total Size',
             'lbl-legend-copy': 'Copy',
-            'lbl-legend-move': 'Move'
+            'lbl-legend-move': 'Move',
+            'lbl-recursive': 'Scan subfolders recursively'
         }
     };
 
@@ -1015,9 +1017,9 @@ document.addEventListener('DOMContentLoaded', () => {
         btnProfileSaveAs.title = dict['btn-profile-save-as-title'];
         btnProfileDelete.title = dict['btn-profile-delete-title'];
 
-        document.querySelector('label[for="dst-dir"]').innerHTML = `<i class="fa-solid fa-folder-open"></i> ${dict['lbl-dst-dir']}`;
+        document.getElementById('lbl-dst-dir').innerHTML = `<i class="fa-solid fa-folder-tree"></i> ${dict['lbl-dst-dir']}`;
         dstDirInput.placeholder = dict['placeholder-dst'];
-        document.querySelector('.form-group label:not([for])').innerHTML = `<i class="fa-solid fa-gears"></i> ${dict['lbl-mode']}`;
+        document.getElementById('lbl-mode').innerHTML = `<i class="fa-solid fa-gears"></i> ${dict['lbl-mode']}`;
         
         const toggleCopy = document.querySelector('.toggle-option[data-value="copy"]');
         toggleCopy.innerHTML = `<i class="fa-regular fa-copy"></i> ${dict['lbl-copy']}`;
@@ -1031,6 +1033,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         document.getElementById('lbl-advanced-filters').innerHTML = `<i class="fa-solid fa-sliders"></i> ${dict['lbl-advanced-filters']}`;
         document.getElementById('lbl-filter-extensions').textContent = dict['lbl-filter-extensions'];
+        document.getElementById('lbl-recursive').textContent = dict['lbl-recursive'];
         document.getElementById('lbl-filter-date').textContent = dict['lbl-filter-date'];
         
         btnDryRun.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> ${dict['btn-dryrun-text']}`;
@@ -1055,8 +1058,10 @@ document.addEventListener('DOMContentLoaded', () => {
         // Update existing input placeholders
         const srcInputs = srcDirsContainer.querySelectorAll('.src-dir-input');
         srcInputs.forEach(input => input.placeholder = dict['placeholder-src']);
-        const srcLabels = document.querySelector('.setup-card .form-group label');
-        srcLabels.innerHTML = `<i class="fa-regular fa-folder-open"></i> ${dict['lbl-src-dirs']}`;
+        const srcLabel = document.getElementById('lbl-src-dirs');
+        if (srcLabel) {
+            srcLabel.innerHTML = `<i class="fa-regular fa-folder-open"></i> ${dict['lbl-src-dirs']}`;
+        }
         btnAddSrc.innerHTML = `<i class="fa-solid fa-plus"></i> ${dict['btn-add-src']}`;
         
         const selectButtons = document.querySelectorAll('.btn-select-src, #btn-select-dst');

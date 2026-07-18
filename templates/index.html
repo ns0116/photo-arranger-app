@@ -66,7 +66,7 @@
 
                 <!-- 複数ソースディレクトリ -->
                 <div class="form-group">
-                    <label>
+                    <label id="lbl-src-dirs">
                         <i class="fa-regular fa-folder-open"></i> コピー元ディレクトリ
                     </label>
                     <div id="src-dirs-container" class="src-dirs-container">
@@ -87,7 +87,7 @@
 
                 <!-- ターゲットディレクトリ -->
                 <div class="form-group">
-                    <label for="dst-dir">
+                    <label for="dst-dir" id="lbl-dst-dir">
                         <i class="fa-solid fa-folder-tree"></i> コピー先（整理先）ディレクトリ
                     </label>
                     <div class="input-with-btn">
@@ -100,7 +100,7 @@
 
                 <!-- 処理モードトグル -->
                 <div class="form-group">
-                    <label><i class="fa-solid fa-gears"></i> 処理モード</label>
+                    <label id="lbl-mode"><i class="fa-solid fa-gears"></i> 処理モード</label>
                     <div class="toggle-container">
                         <div class="toggle-option active" data-value="copy">
                             <i class="fa-regular fa-copy"></i> コピー
