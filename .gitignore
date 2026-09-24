@@ -23,9 +23,9 @@ build/
 dist/
 *.spec
 
-# Claude Code project context (private, not for public repo)
-CLAUDE.md
-.claude/
+# Claude Code project context (CLAUDE.md is public-safe; settings.local.json stays local)
+.claude/settings.local.json
+CLAUDE.local.md
 
 # Internal AI-agent working docs (not for public repo)
 docs/
