@@ -185,6 +185,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const previewCard = document.getElementById('preview-card');
     const previewCount = document.getElementById('preview-count');
     const previewList = document.getElementById('preview-list');
+
+    const similarSection = document.getElementById('similar-section');
+    const similarCount = document.getElementById('similar-count');
+    const similarList = document.getElementById('similar-list');
+    const similarSlider = document.getElementById('similar-threshold-slider');
+    const similarThresholdVal = document.getElementById('similar-threshold-val');
+    const similarEmpty = document.getElementById('similar-empty');
     
     const statTotal = document.getElementById('stat-total');
     const statCopied = document.getElementById('stat-copied');
@@ -209,11 +216,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Current app state
     let selectedMode = 'copy'; // Default mode
     let simulationResults = [];
+    let similarPairs = [];
     let currentLang = 'ja';
     let lastReportData = null;
     let thumbObjectUrls = [];
 
-    // Lazily fetches and displays thumbnails for the Dry Run preview list once a
+    // Lazily fetches and displays thumbnails for the preview list & similar list once a
     // row scrolls into view, avoiding upfront requests for every result.
     const thumbObserver = ('IntersectionObserver' in window)
         ? new IntersectionObserver((entries, obs) => {
@@ -223,7 +231,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     loadThumbnail(entry.target);
                 }
             });
-        }, { root: previewList, rootMargin: '100px' })
+        }, { root: null, rootMargin: '100px' })
         : null;
 
     async function loadThumbnail(imgEl) {
@@ -480,6 +488,10 @@ document.addEventListener('DOMContentLoaded', () => {
         
         logConsole.innerHTML = '';
         simulationResults = [];
+        similarPairs = [];
+        if (similarSection) similarSection.classList.add('hidden');
+        if (similarList) similarList.innerHTML = '';
+        if (similarEmpty) similarEmpty.classList.add('hidden');
         
         if (dryRun) {
             previewCard.classList.add('hidden');
@@ -642,6 +654,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (data.status === 'completed') {
             addLog(data.message, 'success');
             currentFilename.textContent = currentLang === 'ja' ? '完了しました。' : 'Completed.';
+            if (data.similar_pairs) {
+                similarPairs = data.similar_pairs;
+            }
         }
         
         if (data.status === 'cancelled') {
@@ -732,6 +747,101 @@ document.addEventListener('DOMContentLoaded', () => {
                     loadThumbnail(thumbEl);
                 }
             }
+        });
+
+        // Render similar candidates section
+        renderSimilarPairs();
+    }
+
+    // Render near-duplicate candidate pairs (Issue #25)
+    function renderSimilarPairs() {
+        if (!similarSection || !similarList) return;
+
+        if (!similarPairs || similarPairs.length === 0) {
+            similarSection.classList.add('hidden');
+            return;
+        }
+
+        similarSection.classList.remove('hidden');
+        const threshold = parseInt(similarSlider ? similarSlider.value : '5', 10);
+        if (similarThresholdVal) {
+            similarThresholdVal.textContent = threshold;
+        }
+
+        const filteredPairs = similarPairs.filter(p => p.distance <= threshold);
+        const pairsUnit = currentLang === 'ja' ? '組' : 'pairs';
+        if (similarCount) {
+            similarCount.textContent = `${filteredPairs.length} ${pairsUnit}`;
+        }
+
+        similarList.innerHTML = '';
+
+        if (filteredPairs.length === 0) {
+            if (similarEmpty) similarEmpty.classList.remove('hidden');
+            return;
+        }
+
+        if (similarEmpty) similarEmpty.classList.add('hidden');
+
+        filteredPairs.forEach(pair => {
+            const row = document.createElement('div');
+            row.className = 'similar-pair-row';
+
+            const itemA = pair.a;
+            const itemB = pair.b;
+            const fileA = `${escapeHtml(itemA.src_dir)}/${escapeHtml(itemA.filename)}`;
+            const destA = itemA.folder ? `${escapeHtml(itemA.folder)}/` : '';
+            const fileB = `${escapeHtml(itemB.src_dir)}/${escapeHtml(itemB.filename)}`;
+            const destB = itemB.folder ? `${escapeHtml(itemB.folder)}/` : '';
+
+            const distLabel = currentLang === 'ja' ? `距離: ${pair.distance}` : `Distance: ${pair.distance}`;
+
+            const thumbHtmlA = (itemA.full_path && itemA.src_dir_full)
+                ? `<img class="preview-thumb" alt="" data-full-path="${escapeHtml(itemA.full_path)}" data-src-dir="${escapeHtml(itemA.src_dir_full)}">`
+                : `<div class="preview-thumb preview-thumb-placeholder"><i class="fa-regular fa-image"></i></div>`;
+
+            const thumbHtmlB = (itemB.full_path && itemB.src_dir_full)
+                ? `<img class="preview-thumb" alt="" data-full-path="${escapeHtml(itemB.full_path)}" data-src-dir="${escapeHtml(itemB.src_dir_full)}">`
+                : `<div class="preview-thumb preview-thumb-placeholder"><i class="fa-regular fa-image"></i></div>`;
+
+            row.innerHTML = `
+                <div class="similar-pair-item">
+                    ${thumbHtmlA}
+                    <div class="similar-item-info">
+                        <span class="similar-item-file" title="${fileA}">${fileA}</span>
+                        <span class="similar-item-folder" title="${destA}">→ ${destA}</span>
+                    </div>
+                </div>
+                <div class="similar-pair-middle">
+                    <span class="similar-dist-badge">${escapeHtml(distLabel)}</span>
+                    <i class="fa-solid fa-arrows-left-right" style="color: var(--text-secondary); font-size: 0.75rem;"></i>
+                </div>
+                <div class="similar-pair-item">
+                    ${thumbHtmlB}
+                    <div class="similar-item-info">
+                        <span class="similar-item-file" title="${fileB}">${fileB}</span>
+                        <span class="similar-item-folder" title="${destB}">→ ${destB}</span>
+                    </div>
+                </div>
+            `;
+            similarList.appendChild(row);
+
+            row.querySelectorAll('.preview-thumb[data-full-path]').forEach(thumbEl => {
+                if (thumbObserver) {
+                    thumbObserver.observe(thumbEl);
+                } else {
+                    loadThumbnail(thumbEl);
+                }
+            });
+        });
+    }
+
+    if (similarSlider) {
+        similarSlider.addEventListener('input', () => {
+            if (similarThresholdVal) {
+                similarThresholdVal.textContent = similarSlider.value;
+            }
+            renderSimilarPairs();
         });
     }
 
@@ -919,7 +1029,11 @@ document.addEventListener('DOMContentLoaded', () => {
             'lbl-report-total-size': '合計サイズ',
             'lbl-legend-copy': 'コピー',
             'lbl-legend-move': '移動',
-            'lbl-recursive': 'サブフォルダも再帰的にスキャンする'
+            'lbl-recursive': 'サブフォルダも再帰的にスキャンする',
+            'lbl-similar-title': '類似画像の重複候補',
+            'lbl-similar-threshold': '類似度閾値 (Hamming距離 ≤ {val}):',
+            'lbl-similar-desc': '※知覚ハッシュ(dHash)により検出された、構図や内容が酷似している画像の組み合わせです。',
+            'similar-empty': '該当する類似画像はありません。'
         },
         en: {
             'subtitle-text': 'Automatically organize photos into date folders using EXIF metadata and file mtimes',
@@ -977,7 +1091,11 @@ document.addEventListener('DOMContentLoaded', () => {
             'lbl-report-total-size': 'Total Size',
             'lbl-legend-copy': 'Copy',
             'lbl-legend-move': 'Move',
-            'lbl-recursive': 'Scan subfolders recursively'
+            'lbl-recursive': 'Scan subfolders recursively',
+            'lbl-similar-title': 'Near-Duplicate Image Candidates',
+            'lbl-similar-threshold': 'Similarity Threshold (Hamming distance ≤ {val}):',
+            'lbl-similar-desc': '* Pairs of images with very similar composition detected by perceptual hash (dHash).',
+            'similar-empty': 'No similar images found.'
         }
     };
 
@@ -1041,6 +1159,19 @@ document.addEventListener('DOMContentLoaded', () => {
         
         document.querySelector('#preview-card .card-header h2').innerHTML = `<i class="fa-solid fa-eye"></i> ${dict['preview-title-text']}`;
         document.querySelector('.preview-desc').textContent = dict['preview-desc-text'];
+
+        const similarTitleEl = document.getElementById('lbl-similar-title');
+        if (similarTitleEl) similarTitleEl.innerHTML = `<i class="fa-solid fa-clone"></i> ${dict['lbl-similar-title']}`;
+        const similarThresholdLabel = document.getElementById('lbl-similar-threshold');
+        const currThresh = similarSlider ? similarSlider.value : '5';
+        if (similarThresholdLabel) {
+            similarThresholdLabel.innerHTML = dict['lbl-similar-threshold'].replace('{val}', `<span id="similar-threshold-val">${currThresh}</span>`);
+        }
+        const similarDescEl = document.getElementById('lbl-similar-desc');
+        if (similarDescEl) similarDescEl.textContent = dict['lbl-similar-desc'];
+        const similarEmptyEl = document.getElementById('similar-empty');
+        if (similarEmptyEl) similarEmptyEl.textContent = dict['similar-empty'];
+        if (similarPairs.length > 0) renderSimilarPairs();
         
         document.querySelector('.status-label').textContent = dict['lbl-processing-file'];
         

@@ -3,8 +3,6 @@ import os
 import threading
 from datetime import datetime
 
-import pytest
-
 from services.photo_service import arrange_photos, process_file_task, scan_directories
 
 
@@ -310,3 +308,99 @@ def test_arrange_photos_dry_run_sse_payload_includes_thumbnail_keys(
     assert p["src_dir_full"] == src
     assert p["action"] == "copy"
     assert p["filename"] == "photo1.jpg"
+    assert p["phash"] is None  # Single-color dummy image returns None
+
+
+def test_process_file_task_includes_phash_for_pattern_image(temp_workspace):
+    """Test process_file_task computes and returns perceptual hash for non-uniform image."""
+    from PIL import Image, ImageDraw
+
+    src = temp_workspace["src"]
+    dst = temp_workspace["dst"]
+    filepath = os.path.join(src, "pattern.jpg")
+
+    img = Image.new("RGB", (60, 60), color="white")
+    draw = ImageDraw.Draw(img)
+    for i in range(0, 60, 10):
+        draw.line([(0, i), (i, 60)], fill=(i * 4, 100, 200), width=2)
+    img.save(filepath, "JPEG")
+
+    cancel_ev = threading.Event()
+    res = process_file_task(
+        src, "pattern.jpg", dst, "%Y-%m-%d", "copy", True, cancel_ev
+    )
+
+    assert res["status"] == "success"
+    assert res.get("phash") is not None
+    assert len(res["phash"]) == 16
+
+
+def test_arrange_photos_dry_run_detects_similar_pairs(temp_workspace):
+    """Test arrange_photos detects near-duplicate image pairs in dry run (Issue #25)."""
+    from PIL import Image, ImageDraw
+
+    src = temp_workspace["src"]
+    dst = temp_workspace["dst"]
+
+    # Base pattern image
+    img_a = Image.new("RGB", (100, 100), color="white")
+    draw_a = ImageDraw.Draw(img_a)
+    for i in range(0, 100, 10):
+        draw_a.rectangle([i, i, i + 8, i + 8], fill=(i * 2, 120, 200))
+    path_a = os.path.join(src, "img_a.jpg")
+    img_a.save(path_a, "JPEG")
+
+    # Near-duplicate: slight resize/re-compression of img_a
+    path_b = os.path.join(src, "img_b.jpg")
+    img_b = img_a.resize((80, 80))
+    img_b.save(path_b, "JPEG", quality=60)
+
+    # Distinct image: checkerboard
+    img_c = Image.new("RGB", (100, 100), color="white")
+    draw_c = ImageDraw.Draw(img_c)
+    for y in range(0, 100, 20):
+        for x in range(0, 100, 20):
+            if ((x // 20) + (y // 20)) % 2 == 0:
+                draw_c.rectangle([x, y, x + 20, y + 20], fill="black")
+    path_c = os.path.join(src, "img_c.jpg")
+    img_c.save(path_c, "JPEG")
+
+    generator = arrange_photos(
+        [src], dst, naming_rule="YYYY-MM-DD", mode="copy", dry_run=True
+    )
+    chunks = list(generator)
+
+    completed_payload = None
+    processing_payloads = []
+    for chunk in chunks:
+        assert chunk.startswith("data: ")
+        data = json.loads(chunk[len("data: ") :].strip())
+        if data.get("status") == "processing":
+            processing_payloads.append(data)
+        elif data.get("status") == "completed":
+            completed_payload = data
+
+    # Verify per-file payloads contain phash
+    assert len(processing_payloads) == 3
+    for p in processing_payloads:
+        assert "phash" in p
+        assert p["phash"] is not None
+
+    # Verify completed payload contains similar_pairs
+    assert completed_payload is not None
+    assert "similar_pairs" in completed_payload
+    pairs = completed_payload["similar_pairs"]
+    assert len(pairs) >= 1
+
+    # img_a and img_b should be paired with a small distance
+    pair_ab = next(
+        (
+            p
+            for p in pairs
+            if (p["a"]["filename"] == "img_a.jpg" and p["b"]["filename"] == "img_b.jpg")
+            or (p["a"]["filename"] == "img_b.jpg" and p["b"]["filename"] == "img_a.jpg")
+        ),
+        None,
+    )
+    assert pair_ab is not None
+    assert pair_ab["distance"] <= 5
