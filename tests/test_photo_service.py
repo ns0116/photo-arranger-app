@@ -3,8 +3,7 @@ import os
 import threading
 from datetime import datetime
 
-from services.photo_service import (arrange_photos, process_file_task,
-                                    scan_directories)
+from services.photo_service import arrange_photos, process_file_task, scan_directories
 
 
 def test_scan_directories(temp_workspace, image_creator):

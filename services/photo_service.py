@@ -6,8 +6,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
 from config import Config
-from services.file_service import (get_non_conflicting_path, safe_copy,
-                                   safe_move, validate_path_in_dst)
+from services.file_service import (
+    get_non_conflicting_path,
+    safe_copy,
+    safe_move,
+    validate_path_in_dst,
+)
 from utils.date_utils import get_exif_date, get_exif_validation
 from utils.i18n import get_txt
 

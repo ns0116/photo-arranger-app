@@ -1,7 +1,11 @@
 from datetime import datetime
 
-from services.rule_service import (evaluate_rules, evaluate_single_rule,
-                                   match_field, resolve_rule_target_folder)
+from services.rule_service import (
+    evaluate_rules,
+    evaluate_single_rule,
+    match_field,
+    resolve_rule_target_folder,
+)
 
 
 def test_match_field():
