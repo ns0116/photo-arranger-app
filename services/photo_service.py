@@ -142,16 +142,43 @@ def _log_file_action_safe(
         )
 
 
-def parse_naming_template(template_str, dt, original_filename):
+def parse_naming_template(template_str, dt, original_filename, location=None):
     """Parses a custom naming template and returns the relative destination path."""
     base, ext = os.path.splitext(original_filename)
 
     result = template_str
+    result = result.replace("{YYYY-MM-DD}", dt.strftime("%Y-%m-%d"))
+    result = result.replace("{YYYY-MM}", dt.strftime("%Y-%m"))
+    result = result.replace("{YYYYMMDD}", dt.strftime("%Y%m%d"))
+    result = result.replace("{YYYY/MM/DD}", dt.strftime("%Y/%m/%d"))
+    result = result.replace("{YYYY/MM}", dt.strftime("%Y/%m"))
     result = result.replace("{YYYY}", dt.strftime("%Y"))
     result = result.replace("{MM}", dt.strftime("%m"))
     result = result.replace("{DD}", dt.strftime("%d"))
     result = result.replace("{filename}", base)
     result = result.replace("{ext}", ext)
+
+    loc = location or {}
+    city = loc.get("city") or "No_Location"
+    city_ja = loc.get("city_ja") or "位置情報なし"
+    country = loc.get("country") or "No_Location"
+    country_ja = loc.get("country_ja") or "位置情報なし"
+
+    from services.geocoding_service import format_gps_string
+
+    gps_str = format_gps_string(loc.get("lat"), loc.get("lon"))
+
+    result = result.replace("{city}", city)
+    result = result.replace("{city_ja}", city_ja)
+    result = result.replace("{country}", country)
+    result = result.replace("{country_ja}", country_ja)
+    result = result.replace("{gps}", gps_str)
+    result = result.replace(
+        "{lat}", f"{loc.get('lat'):.2f}" if loc.get("lat") is not None else "No_Lat"
+    )
+    result = result.replace(
+        "{lon}", f"{loc.get('lon'):.2f}" if loc.get("lon") is not None else "No_Lon"
+    )
 
     return result
 
@@ -268,6 +295,9 @@ def process_file_task(
                 "extension": ext,
                 "camera_model": validation.get("camera_model"),
                 "dt": dt,
+                "lat": validation.get("lat"),
+                "lon": validation.get("lon"),
+                "location": validation.get("location"),
             }
             rule_folder, matched_rule = evaluate_rules(rules, file_ctx)
             if rule_folder is not None:
@@ -290,7 +320,9 @@ def process_file_task(
                 folder_name = dt.strftime(date_format)
                 target_filename = filename
             else:
-                target_rel_path = parse_naming_template(naming_rule, dt, filename)
+                target_rel_path = parse_naming_template(
+                    naming_rule, dt, filename, location=validation.get("location")
+                )
                 if "{filename}" not in naming_rule:
                     target_rel_path = os.path.join(target_rel_path, filename)
                 folder_name = os.path.dirname(target_rel_path)
@@ -378,6 +410,7 @@ def process_file_task(
                 "warning": warning,
                 "phash": validation.get("phash"),
                 "applied_rule": applied_rule,
+                "location": validation.get("location"),
             }
 
         if local_cancel_event.is_set():
@@ -492,6 +525,7 @@ def process_file_task(
             "warning": warning,
             "phash": validation.get("phash"),
             "applied_rule": applied_rule,
+            "location": validation.get("location"),
         }
 
     except Exception as e:

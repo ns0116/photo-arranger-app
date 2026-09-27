@@ -2,7 +2,7 @@ import os
 from datetime import datetime, timedelta
 
 from PIL import Image
-from PIL.ExifTags import TAGS
+from PIL.ExifTags import IFD, TAGS
 
 from config import Config
 
@@ -46,6 +46,51 @@ def _extract_exif_camera_model(img):
     return None
 
 
+def _dms_to_decimal(dms, ref):
+    """Converts a (degrees, minutes, seconds) tuple or list to decimal degrees."""
+    if not dms or len(dms) < 3:
+        return None
+    try:
+        d = float(dms[0])
+        m = float(dms[1])
+        s = float(dms[2])
+        dec = d + (m / 60.0) + (s / 3600.0)
+        if str(ref).strip().upper() in ("S", "W"):
+            dec = -dec
+        return dec
+    except (ValueError, TypeError, ZeroDivisionError):
+        return None
+
+
+def _extract_exif_gps(img):
+    """Extracts (latitude, longitude) as float tuple or (None, None) from Pillow Image."""
+    try:
+        exif = img.getexif()
+        gps_ifd = None
+        if exif:
+            gps_ifd = exif.get_ifd(IFD.GPSInfo)
+        if not gps_ifd and hasattr(img, "_getexif"):
+            raw = img._getexif()
+            if raw and 34853 in raw:
+                gps_ifd = raw[34853]
+
+        if not gps_ifd:
+            return None, None
+
+        lat_ref = gps_ifd.get(1) or gps_ifd.get("GPSLatitudeRef")
+        lat_val = gps_ifd.get(2) or gps_ifd.get("GPSLatitude")
+        lon_ref = gps_ifd.get(3) or gps_ifd.get("GPSLongitudeRef")
+        lon_val = gps_ifd.get(4) or gps_ifd.get("GPSLongitude")
+
+        lat = _dms_to_decimal(lat_val, lat_ref)
+        lon = _dms_to_decimal(lon_val, lon_ref)
+        if lat is not None and lon is not None:
+            return round(lat, 6), round(lon, 6)
+    except Exception:
+        pass
+    return None, None
+
+
 def get_exif_validation(filepath, include_phash=False):
     """Inspects an image file for decode failures and EXIF date sanity.
 
@@ -61,6 +106,9 @@ def get_exif_validation(filepath, include_phash=False):
         {
             "dt": datetime | None,        # resolved EXIF date-taken, if any
             "camera_model": str | None,   # EXIF camera model, if any
+            "lat": float | None,          # GPS latitude
+            "lon": float | None,          # GPS longitude
+            "location": dict,             # geocoded location (city, country, etc.)
             "corrupt": bool,               # True if Pillow could not decode the file
             "corrupt_detail": str | None,  # raw (untranslated) exception detail
             "abnormal_date": bool,         # True if dt is implausible
@@ -68,9 +116,14 @@ def get_exif_validation(filepath, include_phash=False):
             "phash": str | None,           # 16-hex perceptual hash (if include_phash=True)
         }
     """
+    from services.geocoding_service import reverse_geocode
+
     result = {
         "dt": None,
         "camera_model": None,
+        "lat": None,
+        "lon": None,
+        "location": reverse_geocode(None, None),
         "corrupt": False,
         "corrupt_detail": None,
         "abnormal_date": False,
@@ -90,6 +143,10 @@ def get_exif_validation(filepath, include_phash=False):
             img.load()
             result["dt"] = _extract_exif_datetime(img)
             result["camera_model"] = _extract_exif_camera_model(img)
+            lat, lon = _extract_exif_gps(img)
+            result["lat"] = lat
+            result["lon"] = lon
+            result["location"] = reverse_geocode(lat, lon)
 
             if include_phash:
                 try:

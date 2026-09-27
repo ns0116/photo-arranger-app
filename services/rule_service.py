@@ -60,10 +60,40 @@ def evaluate_single_rule(rule, file_context):
         op = operator or "contains"
         return match_field(model, op, value)
 
+    elif field == "has_gps":
+        loc = file_context.get("location") or {}
+        has_gps = bool(loc.get("has_gps"))
+        val_lower = str(value).strip().lower()
+        if val_lower in ("true", "yes", "1", "あり", "true/yes"):
+            return has_gps
+        elif val_lower in ("false", "no", "0", "なし", "false/no"):
+            return not has_gps
+        return False
+
+    elif field == "country":
+        loc = file_context.get("location") or {}
+        if not loc.get("has_gps"):
+            return False
+        op = operator or "contains"
+        c_en = loc.get("country", "")
+        c_ja = loc.get("country_ja", "")
+        return match_field(c_en, op, value) or match_field(c_ja, op, value)
+
+    elif field == "city":
+        loc = file_context.get("location") or {}
+        if not loc.get("has_gps"):
+            return False
+        op = operator or "contains"
+        city_en = loc.get("city", "")
+        city_ja = loc.get("city_ja", "")
+        return match_field(city_en, op, value) or match_field(city_ja, op, value)
+
     return False
 
 
-def resolve_rule_target_folder(template_str, dt, filename, camera_model=None):
+def resolve_rule_target_folder(
+    template_str, dt, filename, camera_model=None, location=None
+):
     """Resolves dynamic tokens inside a rule's target_folder path.
 
     Supported tokens:
@@ -73,6 +103,11 @@ def resolve_rule_target_folder(template_str, dt, filename, camera_model=None):
         {filename}: original filename without extension
         {ext}: file extension (with dot)
         {camera}: camera model (sanitized)
+        {country}: English country name
+        {country_ja}: Japanese country name
+        {city}: English city name
+        {city_ja}: Japanese city name
+        {gps}: GPS coordinates string (e.g. '35.69N_139.69E')
     """
     if not template_str:
         return ""
@@ -97,6 +132,22 @@ def resolve_rule_target_folder(template_str, dt, filename, camera_model=None):
     res = res.replace("{camera}", safe_camera)
     res = res.replace("{camera_model}", safe_camera)
 
+    loc = location or {}
+    city = loc.get("city") or "No_Location"
+    city_ja = loc.get("city_ja") or "位置情報なし"
+    country = loc.get("country") or "No_Location"
+    country_ja = loc.get("country_ja") or "位置情報なし"
+
+    from services.geocoding_service import format_gps_string
+
+    gps_str = format_gps_string(loc.get("lat"), loc.get("lon"))
+
+    res = res.replace("{city}", city)
+    res = res.replace("{city_ja}", city_ja)
+    res = res.replace("{country}", country)
+    res = res.replace("{country_ja}", country_ja)
+    res = res.replace("{gps}", gps_str)
+
     # Normalize path separators, prevent directory traversal
     parts = [
         p for p in res.replace("\\", "/").split("/") if p and p != "." and p != ".."
@@ -114,6 +165,7 @@ def evaluate_rules(rules, file_context):
         - extension: str (e.g. '.jpg')
         - camera_model: str | None
         - dt: datetime | None
+        - location: dict | None
 
     Returns:
         tuple (target_folder: str | None, matched_rule: dict | None)
@@ -133,6 +185,7 @@ def evaluate_rules(rules, file_context):
                 file_context.get("dt"),
                 file_context.get("filename", ""),
                 file_context.get("camera_model"),
+                file_context.get("location"),
             )
             return resolved_folder, rule
 
