@@ -17,6 +17,8 @@ from utils.i18n import get_txt
 
 # Thread-safe cancellation event
 cancel_event = threading.Event()
+# Global lock to serialize arrangement executions (manual or automated)
+arrange_execution_lock = threading.Lock()
 
 
 def scan_directories(
@@ -504,7 +506,7 @@ def process_file_task(
         }
 
 
-def arrange_photos(
+def _arrange_photos_stream(
     src_dirs,
     dst_dir,
     naming_rule="YYYY-MM-DD",
@@ -518,7 +520,7 @@ def arrange_photos(
     recursive=False,
     rules=None,
 ):
-    """Executes the photo arrangement process and yields progress data as SSE chunks."""
+    """Internal generator driving the photo arrangement SSE chunks."""
     cancel_event.clear()
 
     # Start message logging
@@ -758,3 +760,46 @@ def arrange_photos(
     if dry_run:
         done_payload["similar_pairs"] = similar_pairs
     yield f"data: {json.dumps(done_payload, ensure_ascii=False)}\n\n"
+
+
+def arrange_photos(
+    src_dirs,
+    dst_dir,
+    naming_rule="YYYY-MM-DD",
+    mode="copy",
+    dry_run=False,
+    max_workers=None,
+    extensions=None,
+    date_start=None,
+    date_end=None,
+    lang="ja",
+    recursive=False,
+    rules=None,
+):
+    """Executes the photo arrangement process and yields progress data as SSE chunks.
+
+    Guarded by arrange_execution_lock to prevent concurrent execution conflicts.
+    """
+    if not arrange_execution_lock.acquire(blocking=False):
+        busy_msg = get_txt(lang, "busy_error")
+        busy_payload = {"status": "error", "message": busy_msg, "log_type": "error"}
+        yield f"data: {json.dumps(busy_payload, ensure_ascii=False)}\n\n"
+        return
+
+    try:
+        yield from _arrange_photos_stream(
+            src_dirs,
+            dst_dir,
+            naming_rule=naming_rule,
+            mode=mode,
+            dry_run=dry_run,
+            max_workers=max_workers,
+            extensions=extensions,
+            date_start=date_start,
+            date_end=date_end,
+            lang=lang,
+            recursive=recursive,
+            rules=rules,
+        )
+    finally:
+        arrange_execution_lock.release()

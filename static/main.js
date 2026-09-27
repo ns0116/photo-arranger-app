@@ -1155,7 +1155,16 @@ document.addEventListener('DOMContentLoaded', () => {
             'rule-field-camera_model': 'カメラ機種',
             'rule-placeholder-value': '条件値 (例: .png, Screenshots)',
             'rule-placeholder-target': '振り分け先 (例: Screenshots, Sony/{YYYY-MM})',
-            'btn-remove-rule-title': 'ルールを削除'
+            'btn-remove-rule-title': 'ルールを削除',
+            'lbl-watcher-title': 'フォルダ監視・自動整理モード',
+            'lbl-watcher-desc': '指定したコピー元フォルダをバックグラウンドで定期監視し、新しい写真や動画が追加されると自動的に整理を実行します。',
+            'lbl-watcher-toggle-text': '監視を有効にする',
+            'lbl-watcher-interval': '監視間隔:',
+            'lbl-watcher-last-run': '最終実行:',
+            'lbl-watcher-last-count': '直近処理:',
+            'watcher-status-stopped': '停止中',
+            'watcher-status-idle': '監視中',
+            'watcher-status-arranging': '自動整理中...'
         },
         en: {
             'subtitle-text': 'Automatically organize photos into date folders using EXIF metadata and file mtimes',
@@ -1226,7 +1235,16 @@ document.addEventListener('DOMContentLoaded', () => {
             'rule-field-camera_model': 'Camera Model',
             'rule-placeholder-value': 'Value (e.g. .png, Screenshots)',
             'rule-placeholder-target': 'Target (e.g. Screenshots, Sony/{YYYY-MM})',
-            'btn-remove-rule-title': 'Remove rule'
+            'btn-remove-rule-title': 'Remove rule',
+            'lbl-watcher-title': 'Folder Watcher / Auto-Organize',
+            'lbl-watcher-desc': 'Monitors source directories periodically in the background and automatically organizes new photos.',
+            'lbl-watcher-toggle-text': 'Enable folder watching',
+            'lbl-watcher-interval': 'Interval:',
+            'lbl-watcher-last-run': 'Last run:',
+            'lbl-watcher-last-count': 'Recent processed:',
+            'watcher-status-stopped': 'Stopped',
+            'watcher-status-idle': 'Watching',
+            'watcher-status-arranging': 'Organizing...'
         }
     };
 
@@ -1311,6 +1329,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (removeBtn) removeBtn.title = dict['btn-remove-rule-title'];
             });
         }
+
+        const watcherTitleEl = document.getElementById('lbl-watcher-title');
+        if (watcherTitleEl) watcherTitleEl.textContent = dict['lbl-watcher-title'];
+        const watcherDescEl = document.getElementById('lbl-watcher-desc');
+        if (watcherDescEl) watcherDescEl.textContent = dict['lbl-watcher-desc'];
+        const watcherToggleTextEl = document.getElementById('lbl-watcher-toggle-text');
+        if (watcherToggleTextEl) watcherToggleTextEl.textContent = dict['lbl-watcher-toggle-text'];
+        const watcherIntervalLabel = document.getElementById('lbl-watcher-interval');
+        if (watcherIntervalLabel) watcherIntervalLabel.textContent = dict['lbl-watcher-interval'];
+        const watcherLastRunLabel = document.getElementById('lbl-watcher-last-run');
+        if (watcherLastRunLabel) watcherLastRunLabel.textContent = dict['lbl-watcher-last-run'];
+        const watcherLastCountLabel = document.getElementById('lbl-watcher-last-count');
+        if (watcherLastCountLabel) watcherLastCountLabel.textContent = dict['lbl-watcher-last-count'];
         
         btnDryRun.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> ${dict['btn-dryrun-text']}`;
         btnStart.innerHTML = `<i class="fa-solid fa-circle-play"></i> ${dict['btn-start-text']}`;
@@ -1374,6 +1405,9 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('lbl-legend-move').textContent = dict['lbl-legend-move'];
         // Re-render the monthly breakdown so its inline copy/move labels follow the new language
         if (lastReportData) renderReport(lastReportData);
+        if (typeof updateWatcherUI === 'function' && lastWatcherStatusData) {
+            updateWatcherUI(lastWatcherStatusData);
+        }
     }
 
     btnLangJa.addEventListener('click', () => { setLanguage('ja'); saveSettings(); });
@@ -1534,6 +1568,172 @@ document.addEventListener('DOMContentLoaded', () => {
         if (active) applySettingsToForm(active.settings);
     }
 
+    // -------------------------------------------------------------
+    // Folder Watcher Controller (Issue #29)
+    // -------------------------------------------------------------
+    const toggleWatcher = document.getElementById('toggle-watcher');
+    const watcherStatusBadge = document.getElementById('watcher-status-badge');
+    const watcherIntervalSelect = document.getElementById('watcher-interval-select');
+    const watcherLastRunVal = document.getElementById('watcher-last-run-val');
+    const watcherLastCountVal = document.getElementById('watcher-last-count-val');
+
+    let watcherPollTimer = null;
+    let lastWatcherStatusData = null;
+    let lastWatcherRunTime = null;
+
+    function updateWatcherUI(data) {
+        if (!data) return;
+        lastWatcherStatusData = data;
+        const dict = uiStrings[currentLang];
+
+        if (toggleWatcher) {
+            toggleWatcher.checked = !!data.running;
+        }
+
+        if (watcherStatusBadge) {
+            watcherStatusBadge.className = 'badge';
+            if (!data.running) {
+                watcherStatusBadge.textContent = dict['watcher-status-stopped'];
+            } else if (data.status === 'arranging') {
+                watcherStatusBadge.classList.add('badge-arranging');
+                watcherStatusBadge.textContent = dict['watcher-status-arranging'];
+            } else {
+                watcherStatusBadge.classList.add('badge-running');
+                watcherStatusBadge.textContent = dict['watcher-status-idle'];
+            }
+        }
+
+        if (watcherLastRunVal) {
+            watcherLastRunVal.textContent = data.last_run ? data.last_run : '-';
+        }
+        if (watcherLastCountVal) {
+            watcherLastCountVal.textContent = (data.last_count !== undefined && data.last_count !== null) ? data.last_count : '0';
+        }
+
+        if (data.config && data.config.interval && watcherIntervalSelect) {
+            watcherIntervalSelect.value = String(data.config.interval);
+        }
+
+        // If a new auto-arrangement run completed, refresh report and history
+        if (lastWatcherRunTime !== null && data.last_run && data.last_run !== lastWatcherRunTime) {
+            loadReport();
+        }
+        lastWatcherRunTime = data.last_run;
+    }
+
+    function startWatcherPolling() {
+        if (watcherPollTimer) clearInterval(watcherPollTimer);
+        watcherPollTimer = setInterval(fetchWatcherStatus, 3000);
+    }
+
+    function stopWatcherPolling() {
+        if (watcherPollTimer) {
+            clearInterval(watcherPollTimer);
+            watcherPollTimer = null;
+        }
+    }
+
+    async function fetchWatcherStatus() {
+        try {
+            const res = await fetch('/api/watcher/status');
+            if (res.ok) {
+                const data = await res.json();
+                updateWatcherUI(data);
+                if (!data.running && watcherPollTimer) {
+                    stopWatcherPolling();
+                } else if (data.running && !watcherPollTimer) {
+                    startWatcherPolling();
+                }
+            }
+        } catch (e) {
+            // Ignore polling network errors
+        }
+    }
+
+    if (toggleWatcher) {
+        toggleWatcher.addEventListener('change', async () => {
+            const isEnabled = toggleWatcher.checked;
+            if (isEnabled) {
+                const srcDirInputs = srcDirsContainer.querySelectorAll('.src-dir-input');
+                const srcDirs = Array.from(srcDirInputs).map(i => i.value.trim()).filter(p => p !== '');
+                const dstDir = dstDirInput.value.trim();
+
+                if (srcDirs.length === 0 || !dstDir) {
+                    toggleWatcher.checked = false;
+                    await showAlert(uiStrings[currentLang]['error-select-dirs']);
+                    return;
+                }
+
+                const namingRule = namingRuleSelect.value === 'custom'
+                    ? document.getElementById('custom-template').value.trim()
+                    : namingRuleSelect.value;
+                const extCheckboxes = document.querySelectorAll('input[name="extensions"]:checked');
+                const extensions = Array.from(extCheckboxes).map(cb => cb.value);
+                const recursive = document.getElementById('recursive-scan') ? document.getElementById('recursive-scan').checked : false;
+                const interval = parseInt(watcherIntervalSelect ? watcherIntervalSelect.value : '30', 10) || 30;
+                const rules = getRulesFromUI();
+
+                try {
+                    const res = await fetch('/api/watcher/start', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-Token': getCsrfToken()
+                        },
+                        body: JSON.stringify({
+                            src_dirs: srcDirs,
+                            dst_dir: dstDir,
+                            interval: interval,
+                            mode: selectedMode,
+                            naming_rule: namingRule,
+                            rules: rules,
+                            extensions: extensions.length > 0 ? extensions : null,
+                            recursive: recursive
+                        })
+                    });
+                    const resData = await res.json();
+                    if (!res.ok) {
+                        toggleWatcher.checked = false;
+                        await showAlert(resData.error || 'Failed to start watcher');
+                    } else {
+                        updateWatcherUI(resData.status);
+                        startWatcherPolling();
+                    }
+                } catch (e) {
+                    toggleWatcher.checked = false;
+                    await showAlert(e.message);
+                }
+            } else {
+                try {
+                    const res = await fetch('/api/watcher/stop', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-Token': getCsrfToken()
+                        },
+                        body: JSON.stringify({})
+                    });
+                    const resData = await res.json();
+                    updateWatcherUI(resData.status);
+                    stopWatcherPolling();
+                } catch (e) {
+                    await showAlert(e.message);
+                    fetchWatcherStatus();
+                }
+            }
+        });
+    }
+
+    if (watcherIntervalSelect) {
+        watcherIntervalSelect.addEventListener('change', () => {
+            if (toggleWatcher && toggleWatcher.checked) {
+                // Trigger restart with new interval
+                toggleWatcher.dispatchEvent(new Event('change'));
+            }
+        });
+    }
+
     initProfiles();
     loadReport();
+    fetchWatcherStatus();
 });
