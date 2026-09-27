@@ -282,3 +282,31 @@ def test_arrange_photos_pipeline_integration(temp_workspace, image_creator):
     # Verify outputs placed in correct folders
     assert os.path.exists(os.path.join(dst, "2026-06-01", "photo1.jpg"))
     assert os.path.exists(os.path.join(dst, "2026-06-02", "photo2.jpg"))
+
+
+def test_arrange_photos_dry_run_sse_payload_includes_thumbnail_keys(
+    temp_workspace, image_creator
+):
+    """Test arrange_photos SSE chunks include full_path and src_dir_full for thumbnail previews (Issue #40)."""
+    src = temp_workspace["src"]
+    dst = temp_workspace["dst"]
+    filepath = os.path.join(src, "photo1.jpg")
+    image_creator(filepath, exif_date_str="2026:06:01 12:00:00")
+
+    generator = arrange_photos(
+        [src], dst, naming_rule="YYYY-MM-DD", mode="copy", dry_run=True
+    )
+    chunks = list(generator)
+    processing_payloads = []
+    for chunk in chunks:
+        assert chunk.startswith("data: ")
+        data = json.loads(chunk[len("data: ") :].strip())
+        if data.get("status") == "processing":
+            processing_payloads.append(data)
+
+    assert len(processing_payloads) == 1
+    p = processing_payloads[0]
+    assert p["full_path"] == filepath
+    assert p["src_dir_full"] == src
+    assert p["action"] == "copy"
+    assert p["filename"] == "photo1.jpg"

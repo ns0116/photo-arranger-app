@@ -22,6 +22,7 @@ htmlcov/
 build/
 dist/
 *.spec
+!PhotoArranger.spec
 
 # Claude Code project context (CLAUDE.md is public-safe; settings.local.json stays local)
 .claude/settings.local.json

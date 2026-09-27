@@ -26,8 +26,9 @@
 12. **シャットダウン機能**: アプリ画面からローカルサーバープロセスを安全に終了できます。
 
 ### システム要件
-- macOS (AppleScript 連携によるフォルダ選択ダイアログを使用するため)
-- Windows
+- macOS (AppleScript 連携によるフォルダ選択ダイアログ)
+- Windows (PowerShell 連携によるフォルダ選択ダイアログ)
+- Linux (`zenity`、`kdialog`、または `python3-tk` 連携によるフォルダ選択ダイアログ)
 - Python 3.8 以上
 
 ### セットアップ方法
@@ -35,7 +36,7 @@
 2. フォルダ内で Python 仮想環境を作成し、必要なパッケージをインストールします。
    ```bash
    python3 -m venv venv
-   ./venv/bin/pip install Flask pillow
+   ./venv/bin/pip install -r requirements.txt
    ```
 
 ### 使い方
@@ -51,7 +52,7 @@
 6. 使用後は、画面右上の「電源マーク」からサーバーを終了してください。
 
 ### パッケージ化とビルド（デスクトップアプリ化）
-本アプリは `PyInstaller` を使用して、Pythonのインストール不要なスタンドアローン形式（macOSの `.app` / Windowsの `.exe`）にパッケージ化できます。
+本アプリは `PyInstaller` を使用して、Pythonのインストール不要なスタンドアローン形式（macOSの `.app` / Windowsの `.exe` / Linuxのスタンドアローン実行バイナリ）にパッケージ化できます。
 
 1. **macOSでビルドする場合**:
    ```bash
@@ -67,11 +68,20 @@
    ```
    ビルドが成功すると、`dist/` フォルダ内に `PhotoArranger.exe` が生成されます。
 
+3. **Linuxでビルドする場合**:
+   ```bash
+   chmod +x build_app_linux.sh
+   ./build_app_linux.sh
+   ```
+   ビルドが成功すると、`dist/` フォルダ内に実行可能バイナリ `PhotoArranger` が生成されます。
+
 ### ディレクトリ構造
 ```
 photo-arranger-app/
 ├── app.py              # Flask バックエンドサーバーのメインプログラム
 ├── config.py           # アプリの設定値管理クラス（ポート・スレッド・画像拡張子など）
+├── PhotoArranger.spec  # PyInstaller クロスプラットフォームビルド設定
+├── pytest.ini          # pytest 設定ファイル
 ├── templates/          # UIテンプレート (HTML)
 │   └── index.html
 ├── static/             # フロントエンドの静的アセット (CSS, JS)
@@ -100,6 +110,7 @@ photo-arranger-app/
 │   └── convert_icons.py # PNG画像から各種アイコンを自動生成するスクリプト
 ├── build_app.sh        # macOS用アプリビルドスクリプト (.app生成)
 ├── build_app.bat       # Windows用アプリビルドスクリプト (.exe生成)
+├── build_app_linux.sh  # Linux用アプリビルドスクリプト (実行バイナリ生成)
 ├── tests/              # 各モジュールの単体・結合テストスイート
 ├── README.md
 └── .gitignore
@@ -130,7 +141,8 @@ Evolved from a basic shell script `arrange_photos_yyyymmdd.sh`, this tool now of
 
 ### Requirements
 - macOS (leveraging AppleScript integration for native directory dialogs)
-- Windows
+- Windows (leveraging PowerShell integration for native directory dialogs)
+- Linux (leveraging `zenity`, `kdialog`, or `python3-tk` for directory dialogs)
 - Python 3.8 or higher
 
 ### Setup
@@ -138,7 +150,7 @@ Evolved from a basic shell script `arrange_photos_yyyymmdd.sh`, this tool now of
 2. Initialize a Python virtual environment and install the required dependencies:
    ```bash
    python3 -m venv venv
-   ./venv/bin/pip install Flask pillow
+   ./venv/bin/pip install -r requirements.txt
    ```
 
 ### Usage
@@ -154,7 +166,7 @@ Evolved from a basic shell script `arrange_photos_yyyymmdd.sh`, this tool now of
 6. When finished, shut down the server by clicking the power icon in the top-right corner.
 
 ### Packaging and Building (Standalone App)
-You can bundle this application into a standalone desktop application (macOS `.app` or Windows `.exe`) using `PyInstaller`.
+You can bundle this application into a standalone desktop application (macOS `.app`, Windows `.exe`, or Linux executable binary) using `PyInstaller`.
 
 1. **Building on macOS**:
    Run the build script in your terminal:
@@ -171,11 +183,20 @@ You can bundle this application into a standalone desktop application (macOS `.a
    ```
    After a successful build, `PhotoArranger.exe` will be generated in the `dist/` folder.
 
+3. **Building on Linux**:
+   ```bash
+   chmod +x build_app_linux.sh
+   ./build_app_linux.sh
+   ```
+   After a successful build, the executable `PhotoArranger` binary will be generated in the `dist/` folder.
+
 ### Directory Structure
 ```
 photo-arranger-app/
 ├── app.py              # Main Flask backend server program
 ├── config.py           # Configuration management (ports, threads, extensions)
+├── PhotoArranger.spec  # Cross-platform PyInstaller packaging specification
+├── pytest.ini          # Pytest configuration file
 ├── templates/          # UI templates (HTML)
 │   └── index.html
 ├── static/             # Frontend static assets (CSS, JS)
@@ -204,6 +225,7 @@ photo-arranger-app/
 │   └── convert_icons.py # Automation script to convert PNG to multi-format icons
 ├── build_app.sh        # macOS standalone build script (generates .app)
 ├── build_app.bat       # Windows standalone build script (generates .exe)
+├── build_app_linux.sh  # Linux standalone build script (generates binary)
 ├── tests/              # Unit and integration test suite
 ├── README.md
 └── .gitignore
