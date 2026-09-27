@@ -86,6 +86,31 @@ const STORAGE_KEY = 'photoArrangerSettings';
 // New multi-profile storage key: { activeProfile, profiles: [{ name, settings }] }
 const PROFILES_KEY = 'photoArrangerProfiles';
 
+function getRulesFromUI() {
+    const container = document.getElementById('rules-container');
+    if (!container) return [];
+    const rows = container.querySelectorAll('.rule-row');
+    const rules = [];
+    rows.forEach((row, idx) => {
+        const fieldSelect = row.querySelector('.rule-field-select');
+        const valInput = row.querySelector('.rule-val-input');
+        const targetInput = row.querySelector('.rule-target-input');
+        if (!fieldSelect || !valInput || !targetInput) return;
+        const field = fieldSelect.value;
+        const value = valInput.value.trim();
+        const target_folder = targetInput.value.trim();
+        if (value && target_folder) {
+            rules.push({
+                id: row.getAttribute('data-rule-id') || `rule-${idx + 1}`,
+                field,
+                value,
+                target_folder
+            });
+        }
+    });
+    return rules;
+}
+
 function getCurrentFormSettings() {
     const srcDirInputs = document.querySelectorAll('.src-dir-input');
     const srcDirs = Array.from(srcDirInputs).map(i => i.value);
@@ -102,7 +127,8 @@ function getCurrentFormSettings() {
     const recursive = recursiveEl ? recursiveEl.checked : false;
     const lang = document.querySelector('.lang-option.active');
     const language = lang ? (lang.id === 'btn-lang-en' ? 'en' : 'ja') : 'ja';
-    return { srcDirs, dstDir, namingRule, customTemplate, extensions, dateStart, dateEnd, mode, language, recursive };
+    const rules = getRulesFromUI();
+    return { srcDirs, dstDir, namingRule, customTemplate, extensions, dateStart, dateEnd, mode, language, recursive, rules };
 }
 
 function loadProfilesStore() {
@@ -357,6 +383,86 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('date-end').addEventListener('change', saveSettings);
     document.getElementById('recursive-scan').addEventListener('change', saveSettings);
 
+    // Conditional Rules Builder (Issue #28)
+    const rulesContainer = document.getElementById('rules-container');
+    const btnAddRule = document.getElementById('btn-add-rule');
+
+    function createRuleRow(rule = {}) {
+        const row = document.createElement('div');
+        row.className = 'rule-row';
+        const ruleId = rule.id || `rule-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+        row.setAttribute('data-rule-id', ruleId);
+
+        const fieldVal = rule.field || 'extension';
+        const valVal = rule.value || '';
+        const targetVal = rule.target_folder || '';
+
+        const isJa = currentLang === 'ja';
+        const optExt = isJa ? '拡張子' : 'Extension';
+        const optSrc = isJa ? '元フォルダ名' : 'Source Folder';
+        const optCam = isJa ? 'カメラ機種' : 'Camera Model';
+        const phVal = isJa ? '条件値 (例: .png, Screenshots)' : 'Value (e.g. .png, Screenshots)';
+        const phTarget = isJa ? '振り分け先 (例: Screenshots, Sony/{YYYY-MM})' : 'Target (e.g. Screenshots, Sony/{YYYY-MM})';
+
+        row.innerHTML = `
+            <span class="rule-num">#</span>
+            <select class="rule-field-select form-select">
+                <option value="extension"${fieldVal === 'extension' ? ' selected' : ''}>${optExt}</option>
+                <option value="source_folder"${fieldVal === 'source_folder' ? ' selected' : ''}>${optSrc}</option>
+                <option value="camera_model"${fieldVal === 'camera_model' ? ' selected' : ''}>${optCam}</option>
+            </select>
+            <input type="text" class="rule-val-input" placeholder="${phVal}" value="${escapeHtml(valVal)}" spellcheck="false">
+            <i class="fa-solid fa-arrow-right-long rule-arrow"></i>
+            <input type="text" class="rule-target-input" placeholder="${phTarget}" value="${escapeHtml(targetVal)}" spellcheck="false">
+            <button type="button" class="btn-remove-rule" title="${isJa ? 'ルールを削除' : 'Remove rule'}">
+                <i class="fa-solid fa-trash-can"></i>
+            </button>
+        `;
+
+        row.querySelector('.rule-field-select').addEventListener('change', saveSettings);
+        row.querySelector('.rule-val-input').addEventListener('input', saveSettings);
+        row.querySelector('.rule-target-input').addEventListener('input', saveSettings);
+        row.querySelector('.btn-remove-rule').addEventListener('click', () => {
+            row.remove();
+            updateRuleNumbers();
+            saveSettings();
+        });
+
+        return row;
+    }
+
+    function updateRuleNumbers() {
+        if (!rulesContainer) return;
+        const rows = rulesContainer.querySelectorAll('.rule-row');
+        rows.forEach((r, idx) => {
+            const numEl = r.querySelector('.rule-num');
+            if (numEl) numEl.textContent = `#${idx + 1}`;
+        });
+    }
+
+    function renderRules(rules = []) {
+        if (!rulesContainer) return;
+        rulesContainer.innerHTML = '';
+        if (Array.isArray(rules)) {
+            rules.forEach(rule => {
+                const row = createRuleRow(rule);
+                rulesContainer.appendChild(row);
+            });
+        }
+        updateRuleNumbers();
+    }
+
+    if (btnAddRule) {
+        btnAddRule.addEventListener('click', () => {
+            const row = createRuleRow({});
+            rulesContainer.appendChild(row);
+            updateRuleNumbers();
+            const input = row.querySelector('.rule-val-input');
+            if (input) input.focus();
+            saveSettings();
+        });
+    }
+
     // Clear logs
     btnClearLog.addEventListener('click', () => {
         logConsole.innerHTML = '';
@@ -524,7 +630,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     date_start: dateStart,
                     date_end: dateEnd,
                     lang: currentLang,
-                    recursive: document.getElementById('recursive-scan') ? document.getElementById('recursive-scan').checked : false
+                    recursive: document.getElementById('recursive-scan') ? document.getElementById('recursive-scan').checked : false,
+                    rules: getRulesFromUI()
                 })
             });
 
@@ -723,6 +830,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const thumbHtml = hasThumbSource
                 ? `<img class="preview-thumb" alt="" data-full-path="${escapeHtml(item.full_path)}" data-src-dir="${escapeHtml(item.src_dir_full)}">`
                 : `<div class="preview-thumb preview-thumb-placeholder"><i class="fa-regular fa-image"></i></div>`;
+            const ruleBadgeHtml = item.applied_rule ? `
+                <span class="p-badge p-badge-rule" title="${escapeHtml(currentLang === 'ja' ? 'ルール: ' : 'Rule: ')}${escapeHtml(item.applied_rule.field)}=${escapeHtml(item.applied_rule.value)}">
+                    <i class="fa-solid fa-code-branch"></i> ${escapeHtml(item.applied_rule.name || item.applied_rule.value)}
+                </span>
+            ` : '';
             row.innerHTML = `
                 <div class="preview-row-main">
                     ${thumbHtml}
@@ -730,6 +842,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         ${fileDisplay}
                     </div>
                     <div class="preview-details">
+                        ${ruleBadgeHtml}
                         <span class="p-badge ${escapeHtml(badgeClass)}">${escapeHtml(badgeText)}</span>
                         <i class="fa-solid fa-arrow-right-long preview-arrow"></i>
                         <span class="preview-dest-folder" title="${destEscaped}">${destEscaped}</span>
@@ -1033,7 +1146,16 @@ document.addEventListener('DOMContentLoaded', () => {
             'lbl-similar-title': '類似画像の重複候補',
             'lbl-similar-threshold': '類似度閾値 (Hamming距離 ≤ {val}):',
             'lbl-similar-desc': '※知覚ハッシュ(dHash)により検出された、構図や内容が酷似している画像の組み合わせです。',
-            'similar-empty': '該当する類似画像はありません。'
+            'similar-empty': '該当する類似画像はありません。',
+            'lbl-conditional-rules': '条件分岐ルール',
+            'lbl-rules-desc': '上から順に評価され、最初に一致したルールに従って指定フォルダへ振り分けられます。一致しないファイルは上記の日付命名規則が適用されます。',
+            'lbl-add-rule': 'ルールを追加',
+            'rule-field-extension': '拡張子',
+            'rule-field-source_folder': '元フォルダ名',
+            'rule-field-camera_model': 'カメラ機種',
+            'rule-placeholder-value': '条件値 (例: .png, Screenshots)',
+            'rule-placeholder-target': '振り分け先 (例: Screenshots, Sony/{YYYY-MM})',
+            'btn-remove-rule-title': 'ルールを削除'
         },
         en: {
             'subtitle-text': 'Automatically organize photos into date folders using EXIF metadata and file mtimes',
@@ -1095,7 +1217,16 @@ document.addEventListener('DOMContentLoaded', () => {
             'lbl-similar-title': 'Near-Duplicate Image Candidates',
             'lbl-similar-threshold': 'Similarity Threshold (Hamming distance ≤ {val}):',
             'lbl-similar-desc': '* Pairs of images with very similar composition detected by perceptual hash (dHash).',
-            'similar-empty': 'No similar images found.'
+            'similar-empty': 'No similar images found.',
+            'lbl-conditional-rules': 'Conditional Rules',
+            'lbl-rules-desc': 'Evaluated from top to bottom. The first matching rule decides the destination folder. Unmatched files follow the date naming rules above.',
+            'lbl-add-rule': 'Add Rule',
+            'rule-field-extension': 'Extension',
+            'rule-field-source_folder': 'Source Folder',
+            'rule-field-camera_model': 'Camera Model',
+            'rule-placeholder-value': 'Value (e.g. .png, Screenshots)',
+            'rule-placeholder-target': 'Target (e.g. Screenshots, Sony/{YYYY-MM})',
+            'btn-remove-rule-title': 'Remove rule'
         }
     };
 
@@ -1153,6 +1284,33 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('lbl-filter-extensions').textContent = dict['lbl-filter-extensions'];
         document.getElementById('lbl-recursive').textContent = dict['lbl-recursive'];
         document.getElementById('lbl-filter-date').textContent = dict['lbl-filter-date'];
+
+        const condRulesEl = document.getElementById('lbl-conditional-rules');
+        if (condRulesEl) condRulesEl.innerHTML = `<i class="fa-solid fa-code-branch"></i> ${dict['lbl-conditional-rules']}`;
+        const rulesDescEl = document.getElementById('lbl-rules-desc');
+        if (rulesDescEl) rulesDescEl.textContent = dict['lbl-rules-desc'];
+        const addRuleBtnSpan = document.getElementById('lbl-add-rule');
+        if (addRuleBtnSpan) addRuleBtnSpan.textContent = dict['lbl-add-rule'];
+
+        if (rulesContainer) {
+            rulesContainer.querySelectorAll('.rule-row').forEach(row => {
+                const select = row.querySelector('.rule-field-select');
+                if (select) {
+                    const optExt = select.querySelector('option[value="extension"]');
+                    if (optExt) optExt.textContent = dict['rule-field-extension'];
+                    const optSrc = select.querySelector('option[value="source_folder"]');
+                    if (optSrc) optSrc.textContent = dict['rule-field-source_folder'];
+                    const optCam = select.querySelector('option[value="camera_model"]');
+                    if (optCam) optCam.textContent = dict['rule-field-camera_model'];
+                }
+                const valInput = row.querySelector('.rule-val-input');
+                if (valInput) valInput.placeholder = dict['rule-placeholder-value'];
+                const targetInput = row.querySelector('.rule-target-input');
+                if (targetInput) targetInput.placeholder = dict['rule-placeholder-target'];
+                const removeBtn = row.querySelector('.btn-remove-rule');
+                if (removeBtn) removeBtn.title = dict['btn-remove-rule-title'];
+            });
+        }
         
         btnDryRun.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> ${dict['btn-dryrun-text']}`;
         btnStart.innerHTML = `<i class="fa-solid fa-circle-play"></i> ${dict['btn-start-text']}`;
@@ -1272,6 +1430,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const recursiveEl = document.getElementById('recursive-scan');
             if (recursiveEl) recursiveEl.checked = !!s.recursive;
+
+            renderRules(s.rules || []);
 
             // Apply mode last: the toggle's click handler also calls saveSettings(),
             // so by the time it fires the rest of the form already reflects this profile.

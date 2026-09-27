@@ -6,12 +6,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
 from config import Config
-from services.file_service import (
-    get_non_conflicting_path,
-    safe_copy,
-    safe_move,
-    validate_path_in_dst,
-)
+from services.file_service import (get_non_conflicting_path, safe_copy,
+                                   safe_move, validate_path_in_dst)
 from utils.date_utils import get_exif_date, get_exif_validation
 from utils.i18n import get_txt
 
@@ -167,6 +163,7 @@ def process_file_task(
     size_map=None,
     size_map_lock=None,
     db_write_lock=None,
+    rules=None,
 ):
     """Processes a single file. Used inside worker threads."""
     if local_cancel_event.is_set():
@@ -249,20 +246,49 @@ def process_file_task(
                 ),
             }
 
-        # Apply legacy rules or custom naming templates
-        if "%" in naming_rule:
-            folder_name = dt.strftime(naming_rule)
-            target_filename = filename
-        elif naming_rule in Config.NAMING_RULES:
-            date_format = Config.NAMING_RULES[naming_rule]
-            folder_name = dt.strftime(date_format)
-            target_filename = filename
-        else:
-            target_rel_path = parse_naming_template(naming_rule, dt, filename)
-            if "{filename}" not in naming_rule:
-                target_rel_path = os.path.join(target_rel_path, filename)
-            folder_name = os.path.dirname(target_rel_path)
-            target_filename = os.path.basename(target_rel_path)
+        # Check conditional rules first (issue #28)
+        applied_rule = None
+        folder_name = None
+        target_filename = filename
+
+        if rules:
+            from services.rule_service import evaluate_rules
+
+            ext = os.path.splitext(filename)[1].lower()
+            file_ctx = {
+                "filename": filename,
+                "src_dir": src_dirname,
+                "src_dir_full": s_dir,
+                "extension": ext,
+                "camera_model": validation.get("camera_model"),
+                "dt": dt,
+            }
+            rule_folder, matched_rule = evaluate_rules(rules, file_ctx)
+            if rule_folder is not None:
+                folder_name = rule_folder
+                applied_rule = {
+                    "id": matched_rule.get("id"),
+                    "name": matched_rule.get("name") or matched_rule.get("value"),
+                    "field": matched_rule.get("field"),
+                    "value": matched_rule.get("value"),
+                    "target_folder": matched_rule.get("target_folder"),
+                }
+
+        # Apply legacy rules or custom naming templates if no rule matched
+        if folder_name is None:
+            if "%" in naming_rule:
+                folder_name = dt.strftime(naming_rule)
+                target_filename = filename
+            elif naming_rule in Config.NAMING_RULES:
+                date_format = Config.NAMING_RULES[naming_rule]
+                folder_name = dt.strftime(date_format)
+                target_filename = filename
+            else:
+                target_rel_path = parse_naming_template(naming_rule, dt, filename)
+                if "{filename}" not in naming_rule:
+                    target_rel_path = os.path.join(target_rel_path, filename)
+                folder_name = os.path.dirname(target_rel_path)
+                target_filename = os.path.basename(target_rel_path)
 
         validate_path_in_dst(dst_dir, os.path.join(dst_dir, folder_name))
 
@@ -345,6 +371,7 @@ def process_file_task(
                 "log_type": log_type_map.get(action, "info"),
                 "warning": warning,
                 "phash": validation.get("phash"),
+                "applied_rule": applied_rule,
             }
 
         if local_cancel_event.is_set():
@@ -458,6 +485,7 @@ def process_file_task(
             "log_type": log_type,
             "warning": warning,
             "phash": validation.get("phash"),
+            "applied_rule": applied_rule,
         }
 
     except Exception as e:
@@ -484,6 +512,7 @@ def arrange_photos(
     date_end=None,
     lang="ja",
     recursive=False,
+    rules=None,
 ):
     """Executes the photo arrangement process and yields progress data as SSE chunks."""
     cancel_event.clear()
@@ -530,14 +559,21 @@ def arrange_photos(
         except Exception as e:
             err_msg = get_txt(lang, "scan_error", dir=d, error=str(e))
             logging.error(err_msg)
-            yield f"data: {json.dumps({'status': 'error', 'message': err_msg, 'log_type': 'error'}, ensure_ascii=False)}\n\n"
+            err_data = {"status": "error", "message": err_msg, "log_type": "error"}
+            yield f"data: {json.dumps(err_data, ensure_ascii=False)}\n\n"
             continue
 
     total_files = len(files_to_process)
     if total_files == 0:
         msg = get_txt(lang, "no_files")
         logging.info(msg)
-        yield f"data: {json.dumps({'status': 'completed', 'message': msg, 'progress': 100, 'log_type': 'info'}, ensure_ascii=False)}\n\n"
+        no_files_data = {
+            "status": "completed",
+            "message": msg,
+            "progress": 100,
+            "log_type": "info",
+        }
+        yield f"data: {json.dumps(no_files_data, ensure_ascii=False)}\n\n"
         return
 
     copied_count = 0
@@ -571,6 +607,7 @@ def arrange_photos(
                 size_map,
                 size_map_lock,
                 db_write_lock,
+                rules,
             ): (s_dir, filename)
             for s_dir, filename in files_to_process
         }
@@ -579,7 +616,12 @@ def arrange_photos(
             if cancel_event.is_set():
                 cancel_msg = get_txt(lang, "user_cancelled")
                 logging.warning(cancel_msg)
-                yield f"data: {json.dumps({'status': 'cancelled', 'message': cancel_msg, 'log_type': 'error'}, ensure_ascii=False)}\n\n"
+                cancel_data = {
+                    "status": "cancelled",
+                    "message": cancel_msg,
+                    "log_type": "error",
+                }
+                yield f"data: {json.dumps(cancel_data, ensure_ascii=False)}\n\n"
                 for f in futures:
                     f.cancel()
                 return
@@ -648,6 +690,7 @@ def arrange_photos(
                 "log_type": res.get("log_type", "info"),
                 "warning": res.get("warning"),
                 "phash": res.get("phash"),
+                "applied_rule": res.get("applied_rule"),
                 "stats": {
                     "total": total_files,
                     "copied": copied_count,

@@ -3,7 +3,8 @@ import os
 import threading
 from datetime import datetime
 
-from services.photo_service import arrange_photos, process_file_task, scan_directories
+from services.photo_service import (arrange_photos, process_file_task,
+                                    scan_directories)
 
 
 def test_scan_directories(temp_workspace, image_creator):
@@ -404,3 +405,96 @@ def test_arrange_photos_dry_run_detects_similar_pairs(temp_workspace):
     )
     assert pair_ab is not None
     assert pair_ab["distance"] <= 5
+
+
+def test_process_file_task_applies_conditional_rules(temp_workspace, image_creator):
+    """Test process_file_task properly applies conditional rules and falls back."""
+    src = temp_workspace["src"]
+    dst = temp_workspace["dst"]
+
+    # File 1: PNG (should match extension rule)
+    p1 = os.path.join(src, "shot.png")
+    image_creator(p1)
+
+    # File 2: JPEG with camera model (should match camera rule)
+    p2 = os.path.join(src, "sony.jpg")
+    image_creator(p2, exif_date_str="2026:06:01 12:00:00", camera_model="ILCE-7M4")
+
+    # File 3: JPEG without camera model (should fall back to date)
+    p3 = os.path.join(src, "other.jpg")
+    image_creator(p3, exif_date_str="2026:06:02 12:00:00")
+
+    rules = [
+        {
+            "id": "r1",
+            "name": "Screenshots",
+            "field": "extension",
+            "value": ".png",
+            "target_folder": "Screenshots",
+        },
+        {
+            "id": "r2",
+            "name": "Sony Cameras",
+            "field": "camera_model",
+            "value": "ILCE",
+            "target_folder": "Sony/{YYYY-MM}",
+        },
+    ]
+
+    cancel_ev = threading.Event()
+
+    # Test file 1
+    res1 = process_file_task(
+        src, "shot.png", dst, "YYYY-MM-DD", "copy", True, cancel_ev, rules=rules
+    )
+    assert res1["status"] == "success"
+    assert res1["folder"] == "Screenshots"
+    assert res1["applied_rule"] is not None
+    assert res1["applied_rule"]["id"] == "r1"
+
+    # Test file 2
+    res2 = process_file_task(
+        src, "sony.jpg", dst, "YYYY-MM-DD", "copy", True, cancel_ev, rules=rules
+    )
+    assert res2["status"] == "success"
+    assert res2["folder"] == "Sony/2026-06"
+    assert res2["applied_rule"] is not None
+    assert res2["applied_rule"]["id"] == "r2"
+
+    # Test file 3 (fallback)
+    res3 = process_file_task(
+        src, "other.jpg", dst, "YYYY-MM-DD", "copy", True, cancel_ev, rules=rules
+    )
+    assert res3["status"] == "success"
+    assert res3["folder"] == "2026-06-02"
+    assert res3["applied_rule"] is None
+
+
+def test_arrange_photos_with_rules_execution(temp_workspace, image_creator):
+    """Test full arrange_photos execution moves/copies files according to rules."""
+    src = temp_workspace["src"]
+    dst = temp_workspace["dst"]
+
+    p1 = os.path.join(src, "shot.png")
+    image_creator(p1)
+
+    p2 = os.path.join(src, "photo.jpg")
+    image_creator(p2, exif_date_str="2026:06:01 12:00:00")
+
+    rules = [
+        {
+            "id": "r1",
+            "field": "extension",
+            "value": ".png",
+            "target_folder": "Screenshots",
+        }
+    ]
+
+    generator = arrange_photos(
+        [src], dst, naming_rule="YYYY-MM-DD", mode="copy", dry_run=False, rules=rules
+    )
+    chunks = list(generator)
+    assert len(chunks) > 0
+
+    assert os.path.exists(os.path.join(dst, "Screenshots", "shot.png"))
+    assert os.path.exists(os.path.join(dst, "2026-06-01", "photo.jpg"))

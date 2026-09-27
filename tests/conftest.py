@@ -64,7 +64,7 @@ def temp_workspace(tmp_path):
 def image_creator():
     """Provides a helper function to create dummy image or text files for testing."""
 
-    def _create(path, exif_date_str=None, content=None):
+    def _create(path, exif_date_str=None, content=None, camera_model=None):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         if content is not None:
             # Write a plain file (like a text file or custom binary data)
@@ -73,12 +73,16 @@ def image_creator():
         else:
             # Write a dummy image using Pillow
             img = Image.new("RGB", (5, 5), color="blue")
-            if exif_date_str:
+            if exif_date_str or camera_model:
                 exif = img.getexif()
-                # 36867: DateTimeOriginal, 36868: DateTimeDigitized, 306: DateTime
-                exif[36867] = exif_date_str
-                exif[36868] = exif_date_str
-                exif[306] = exif_date_str
+                if exif_date_str:
+                    # 36867: DateTimeOriginal, 36868: DateTimeDigitized, 306: DateTime
+                    exif[36867] = exif_date_str
+                    exif[36868] = exif_date_str
+                    exif[306] = exif_date_str
+                if camera_model:
+                    # 272: Model
+                    exif[272] = camera_model
                 img.save(path, "JPEG", exif=exif)
             else:
                 img.save(path, "JPEG")
