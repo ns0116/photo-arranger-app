@@ -157,7 +157,8 @@ def test_db_migration_from_legacy_schema(tmp_path):
     legacy_db = tmp_path / "legacy.db"
     conn = sqlite3.connect(str(legacy_db))
     # Create legacy table without phash column
-    conn.execute("""
+    conn.execute(
+        """
         CREATE TABLE file_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             session_id TEXT NOT NULL,
@@ -168,15 +169,18 @@ def test_db_migration_from_legacy_schema(tmp_path):
             mtime REAL NOT NULL,
             status TEXT NOT NULL
         )
-    """)
-    conn.execute("""
+    """
+    )
+    conn.execute(
+        """
         CREATE TABLE sessions (
             session_id TEXT PRIMARY KEY,
             timestamp TEXT NOT NULL,
             mode TEXT NOT NULL,
             status TEXT NOT NULL
         )
-    """)
+    """
+    )
     conn.commit()
     conn.close()
 
