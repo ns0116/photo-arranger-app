@@ -1,7 +1,11 @@
 @echo off
+setlocal
 echo ==================================================
 echo Photo Arranger App Build Script (Windows)
 echo ==================================================
+
+:: Change to the project root directory
+cd /d "%~dp0.."
 
 :: Check if venv exists
 if not exist "venv" (

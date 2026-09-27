@@ -56,22 +56,22 @@
 
 1. **macOSでビルドする場合**:
    ```bash
-   chmod +x build_app.sh
-   ./build_app.sh
+   ./scripts/build_app.sh
+   # または make build-mac
    ```
    ビルドが成功すると、`dist/` フォルダ内に `PhotoArranger.app` が生成されます。ダブルクリックして起動可能です。
 
 2. **Windowsでビルドする場合**:
-   コマンドプロンプトで以下を実行するか、`build_app.bat` をダブルクリックして実行します。
+   コマンドプロンプトで以下を実行するか、`scripts\build_app.bat` をダブルクリックして実行します。
    ```cmd
-   build_app.bat
+   scripts\build_app.bat
    ```
    ビルドが成功すると、`dist/` フォルダ内に `PhotoArranger.exe` が生成されます。
 
 3. **Linuxでビルドする場合**:
    ```bash
-   chmod +x build_app_linux.sh
-   ./build_app_linux.sh
+   ./scripts/build_app_linux.sh
+   # または make build-linux
    ```
    ビルドが成功すると、`dist/` フォルダ内に実行可能バイナリ `PhotoArranger` が生成されます。
 
@@ -81,7 +81,9 @@ photo-arranger-app/
 ├── app.py              # Flask バックエンドサーバーのメインプログラム
 ├── config.py           # アプリの設定値管理クラス（ポート・スレッド・画像拡張子など）
 ├── PhotoArranger.spec  # PyInstaller クロスプラットフォームビルド設定
+├── Makefile            # 開発・テスト・ビルド・クリーンアップ用タスク定義
 ├── pytest.ini          # pytest 設定ファイル
+├── requirements.txt    # Python 依存ライブラリ一覧
 ├── templates/          # UIテンプレート (HTML)
 │   └── index.html
 ├── static/             # フロントエンドの静的アセット (CSS, JS)
@@ -91,28 +93,39 @@ photo-arranger-app/
 │   ├── __init__.py     # ルートの初期化とBlueprintの登録
 │   ├── arrange.py      # /api/arrange, /api/cancel
 │   ├── directories.py  # /api/select-dir (フォルダ選択)
-│   └── system.py       # /, /api/shutdown, /api/undo (Undo・シャットダウン)
+│   ├── report.py       # /api/report (整理履歴・統計)
+│   ├── system.py       # /, /api/shutdown, /api/undo (Undo・シャットダウン)
+│   ├── thumbnail.py    # /api/thumbnail (画像サムネイル配信)
+│   └── watcher.py      # /api/watcher/* (フォルダ監視制御)
 ├── services/           # ビジネスロジック層
 │   ├── __init__.py
+│   ├── cities_data.py  # 軽量オフライン都市・撮影地データベース
 │   ├── db_service.py   # SQLiteデータベースによる重複・履歴管理
 │   ├── file_service.py # 安全なファイル移動・コピー・衝突回避ロジック
-│   └── photo_service.py # 写真解析・整理並行処理の実行パイプライン
+│   ├── geocoding_service.py # オフライン逆ジオコーディング探索ロジック
+│   ├── photo_service.py # 写真解析・整理並行処理の実行パイプライン
+│   ├── rule_service.py # 条件分岐ルールの評価と振り分け先解決
+│   └── watcher_service.py # バックグラウンドフォルダ監視・自動整理デーモン
 ├── utils/              # 共通ユーティリティ層
 │   ├── __init__.py
-│   ├── date_utils.py   # EXIF情報の抽出および日付解析
+│   ├── date_utils.py   # EXIF情報の抽出および日付・GPS解析
 │   ├── i18n.py         # 多言語対応の翻訳カタログとヘルパー
+│   ├── phash_utils.py  # 知覚ハッシュ(dHash)と類似重複検出
 │   └── platform_utils.py # OSネイティブのフォルダ選択ダイアログ呼び出し
 ├── assets/             # アプリで使用するアイコンアセット類
 │   ├── icon_base.png   # アイコン元の高解像度画像
 │   ├── icon.icns       # macOS アプリ用アイコン
 │   └── icon.ico        # Windows アプリ用アイコン
+├── docs/               # プロジェクト仕様・監査ドキュメント
+│   └── AUDIT.md        # セキュリティ・品質監査レポート
 ├── scripts/            # 開発・ビルドユーティリティスクリプト
+│   ├── build_app.sh    # macOS用アプリビルドスクリプト (.app生成)
+│   ├── build_app.bat   # Windows用アプリビルドスクリプト (.exe生成)
+│   ├── build_app_linux.sh # Linux用アプリビルドスクリプト (実行バイナリ生成)
 │   └── convert_icons.py # PNG画像から各種アイコンを自動生成するスクリプト
-├── build_app.sh        # macOS用アプリビルドスクリプト (.app生成)
-├── build_app.bat       # Windows用アプリビルドスクリプト (.exe生成)
-├── build_app_linux.sh  # Linux用アプリビルドスクリプト (実行バイナリ生成)
-├── tests/              # 各モジュールの単体・結合テストスイート
+├── tests/              # 各モジュールの単体・結合テストスイート (127テスト)
 ├── README.md
+├── CLAUDE.md
 └── .gitignore
 ```
 
@@ -171,22 +184,22 @@ You can bundle this application into a standalone desktop application (macOS `.a
 1. **Building on macOS**:
    Run the build script in your terminal:
    ```bash
-   chmod +x build_app.sh
-   ./build_app.sh
+   ./scripts/build_app.sh
+   # or: make build-mac
    ```
    After a successful build, `PhotoArranger.app` will be created in the `dist/` folder. You can launch it by double-clicking.
 
 2. **Building on Windows**:
-   Double-click `build_app.bat` or run it from Command Prompt:
+   Double-click `scripts\build_app.bat` or run it from Command Prompt:
    ```cmd
-   build_app.bat
+   scripts\build_app.bat
    ```
    After a successful build, `PhotoArranger.exe` will be generated in the `dist/` folder.
 
 3. **Building on Linux**:
    ```bash
-   chmod +x build_app_linux.sh
-   ./build_app_linux.sh
+   ./scripts/build_app_linux.sh
+   # or: make build-linux
    ```
    After a successful build, the executable `PhotoArranger` binary will be generated in the `dist/` folder.
 
@@ -196,7 +209,9 @@ photo-arranger-app/
 ├── app.py              # Main Flask backend server program
 ├── config.py           # Configuration management (ports, threads, extensions)
 ├── PhotoArranger.spec  # Cross-platform PyInstaller packaging specification
+├── Makefile            # Developer task runner (run, test, lint, format, clean, build)
 ├── pytest.ini          # Pytest configuration file
+├── requirements.txt    # Python dependencies list
 ├── templates/          # UI templates (HTML)
 │   └── index.html
 ├── static/             # Frontend static assets (CSS, JS)
@@ -206,27 +221,38 @@ photo-arranger-app/
 │   ├── __init__.py     # Routing initialization and blueprint registration
 │   ├── arrange.py      # /api/arrange, /api/cancel
 │   ├── directories.py  # /api/select-dir (directory picker)
-│   └── system.py       # /, /api/shutdown, /api/undo (rollbacks & shutdowns)
+│   ├── report.py       # /api/report (history & statistics)
+│   ├── system.py       # /, /api/shutdown, /api/undo (rollbacks & shutdowns)
+│   ├── thumbnail.py    # /api/thumbnail (image thumbnail server)
+│   └── watcher.py      # /api/watcher/* (folder monitoring daemon controls)
 ├── services/           # Business logic layer
 │   ├── __init__.py
+│   ├── cities_data.py  # Lightweight offline city & sightseeing database
 │   ├── db_service.py   # SQLite database for duplication and session history
 │   ├── file_service.py # Safe move/copy operations and conflict resolutions
-│   └── photo_service.py # Photo parsing and organization workflow pipelines
+│   ├── geocoding_service.py # Offline reverse geocoding search logic
+│   ├── photo_service.py # Photo parsing and organization workflow pipelines
+│   ├── rule_service.py # Conditional rules evaluation and target routing
+│   └── watcher_service.py # Background folder watcher & auto-arranging daemon
 ├── utils/              # Common utilities
 │   ├── __init__.py
-│   ├── date_utils.py   # EXIF tags and date extraction helpers
+│   ├── date_utils.py   # EXIF tags, GPS coordinates, and date extraction
 │   ├── i18n.py         # Bilingual translation logs catalog
+│   ├── phash_utils.py  # Perceptual hash (dHash) & near-duplicate detection
 │   └── platform_utils.py # Native OS folder dialog invoker
 ├── assets/             # App icon assets
 │   ├── icon_base.png   # Original high-res icon image
 │   ├── icon.icns       # macOS app icon
 │   └── icon.ico        # Windows app icon
-├── scripts/            # Utility development scripts
+├── docs/               # Project documentation & audit reports
+│   └── AUDIT.md        # Security & quality audit report
+├── scripts/            # Utility development & build scripts
+│   ├── build_app.sh    # macOS standalone build script (generates .app)
+│   ├── build_app.bat   # Windows standalone build script (generates .exe)
+│   ├── build_app_linux.sh # Linux standalone build script (generates binary)
 │   └── convert_icons.py # Automation script to convert PNG to multi-format icons
-├── build_app.sh        # macOS standalone build script (generates .app)
-├── build_app.bat       # Windows standalone build script (generates .exe)
-├── build_app_linux.sh  # Linux standalone build script (generates binary)
-├── tests/              # Unit and integration test suite
+├── tests/              # Unit and integration test suite (127 tests)
 ├── README.md
+├── CLAUDE.md
 └── .gitignore
 ```
