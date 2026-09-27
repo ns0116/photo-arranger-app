@@ -3,9 +3,13 @@
 # エラーが起きたら処理を中断
 set -e
 
-echo "=== Photo Arranger App ビルドスクリプト ==="
+# スクリプトがある場所の親ディレクトリ（プロジェクトルート）に移動
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$PROJECT_ROOT"
 
-# 修正 #10: 仮想環境の存在確認（Windows版 build_app.bat と一貫性を持たせる）
+echo "=== Photo Arranger App ビルドスクリプト (macOS) ==="
+
+# 仮想環境の存在確認
 if [ ! -d "venv" ]; then
     echo "[エラー] venv (Python仮想環境) がフォルダ内に見つかりません。"
     echo "先に仮想環境を作成し、依存関係をセットアップしてください。"

@@ -3,6 +3,10 @@
 # エラーが起きたら処理を中断
 set -e
 
+# スクリプトがある場所の親ディレクトリ（プロジェクトルート）に移動
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$PROJECT_ROOT"
+
 echo "=== Photo Arranger App ビルドスクリプト (Linux) ==="
 
 # 仮想環境の存在確認
