@@ -207,6 +207,41 @@
                     </div>
                 </details>
 
+                <!-- フォルダ監視・自動整理モード (Issue #29) -->
+                <details id="watcher-details" class="advanced-settings-details" style="margin-top: 15px; color: white;">
+                    <summary style="cursor: pointer; font-weight: bold; margin-bottom: 8px; display: flex; align-items: center;" id="lbl-watcher-summary">
+                        <span><i class="fa-solid fa-clock-rotate-left"></i> <span id="lbl-watcher-title">フォルダ監視・自動整理モード</span></span>
+                        <span id="watcher-status-badge" class="badge" style="margin-left: 10px; font-size: 0.75rem;">停止中</span>
+                    </summary>
+                    <div class="advanced-settings-content" style="padding: 12px; background: rgba(255,255,255,0.05); border-radius: 8px;">
+                        <p style="font-size: 0.85em; color: rgba(255,255,255,0.7); margin-bottom: 12px; line-height: 1.4;" id="lbl-watcher-desc">
+                            指定したコピー元フォルダをバックグラウンドで定期監視し、新しい写真や動画が追加されると自動的に整理を実行します。
+                        </p>
+                        <div class="watcher-controls" style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 10px;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <label class="switch">
+                                    <input type="checkbox" id="toggle-watcher">
+                                    <span class="slider round"></span>
+                                </label>
+                                <span id="lbl-watcher-toggle-text" style="font-size: 0.9em; font-weight: 500;">監視を有効にする</span>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 6px; margin-left: auto;">
+                                <label for="watcher-interval-select" style="font-size: 0.85em; color: rgba(255,255,255,0.8);" id="lbl-watcher-interval">監視間隔:</label>
+                                <select id="watcher-interval-select" class="form-select" style="width: auto; padding: 4px 28px 4px 10px; font-size: 0.85em;">
+                                    <option value="10">10秒</option>
+                                    <option value="30" selected>30秒 (推奨)</option>
+                                    <option value="60">1分</option>
+                                    <option value="300">5分</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="watcher-info-panel" class="watcher-info-panel" style="font-size: 0.8rem; color: rgba(255,255,255,0.6); display: flex; gap: 16px;">
+                            <div><span id="lbl-watcher-last-run">最終実行:</span> <span id="watcher-last-run-val">-</span></div>
+                            <div><span id="lbl-watcher-last-count">直近処理:</span> <span id="watcher-last-count-val">0</span> 件</div>
+                        </div>
+                    </div>
+                </details>
+
                 <!-- アクションボタン -->
                 <div class="action-buttons">
                     <button type="button" id="btn-dryrun" class="btn btn-secondary flex-1">

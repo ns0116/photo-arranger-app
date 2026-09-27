@@ -34,6 +34,12 @@ def shutdown():
     _verify_csrf()
     try:
         logging.info("Shutdown requested from client. Terminating process...")
+        try:
+            from services.watcher_service import folder_watcher
+
+            folder_watcher.stop()
+        except Exception as we:
+            logging.warning(f"Error stopping watcher on shutdown: {we}")
         os.kill(os.getpid(), signal.SIGINT)
         return jsonify({"message": "サーバーをシャットダウンしています..."})
     except Exception as e:

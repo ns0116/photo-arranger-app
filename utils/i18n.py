@@ -26,6 +26,7 @@ TRANSLATIONS = {
         "warning_corrupt_file": "画像を読み込めませんでした（破損している可能性があります）: {detail}",
         "warning_future_date": "EXIF撮影日時が未来の日付です（{date}）。カメラの時計設定をご確認ください。",
         "warning_old_date": "EXIF撮影日時が異常に古い日付です（{date}）。EXIF情報が破損している可能性があります。",
+        "busy_error": "現在、別の整理処理が実行中です。完了するまでお待ちください。",
     },
     "en": {
         "start_dryrun": "Starting simulation (Dry Run)...",
@@ -52,6 +53,7 @@ TRANSLATIONS = {
         "warning_corrupt_file": "Failed to decode image (it may be corrupted): {detail}",
         "warning_future_date": "EXIF date taken is in the future ({date}). Please check the camera's clock settings.",
         "warning_old_date": "EXIF date taken is unrealistically old ({date}). The EXIF data may be corrupted.",
+        "busy_error": "Another arrangement process is currently running. Please wait for it to finish.",
     },
 }
 
