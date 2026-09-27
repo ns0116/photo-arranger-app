@@ -32,12 +32,16 @@ def _extract_exif_datetime(img):
     return None
 
 
-def get_exif_validation(filepath):
+def get_exif_validation(filepath, include_phash=False):
     """Inspects an image file for decode failures and EXIF date sanity.
 
     This is the single place that opens/decodes the image so callers needing
     both the resolved date and any corruption/abnormal-date warnings only pay
     the Pillow decode cost once (see issue #32).
+
+    When include_phash=True, also computes the perceptual hash (dHash) for
+    near-duplicate detection (see issue #25). The hash calculation is isolated
+    so any failure never impacts corrupt/abnormal_date determination.
 
     Returns a dict:
         {
@@ -46,6 +50,7 @@ def get_exif_validation(filepath):
             "corrupt_detail": str | None,  # raw (untranslated) exception detail
             "abnormal_date": bool,         # True if dt is implausible
             "abnormal_reason": "future" | "too_old" | None,
+            "phash": str | None,           # 16-hex perceptual hash (if include_phash=True)
         }
     """
     result = {
@@ -54,6 +59,7 @@ def get_exif_validation(filepath):
         "corrupt_detail": None,
         "abnormal_date": False,
         "abnormal_reason": None,
+        "phash": None,
     }
 
     ext = os.path.splitext(filepath)[1].lower()
@@ -67,6 +73,14 @@ def get_exif_validation(filepath):
             # rather than surfacing later during processing.
             img.load()
             result["dt"] = _extract_exif_datetime(img)
+
+            if include_phash:
+                try:
+                    from utils.phash_utils import compute_phash
+
+                    result["phash"] = compute_phash(img)
+                except Exception:
+                    result["phash"] = None
     except Exception as e:
         result["corrupt"] = True
         result["corrupt_detail"] = str(e)

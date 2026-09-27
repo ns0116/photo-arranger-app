@@ -49,14 +49,20 @@ def initialize_db():
                 sha256 TEXT NOT NULL,
                 mtime REAL NOT NULL,
                 status TEXT NOT NULL,
+                phash TEXT,
                 FOREIGN KEY(session_id) REFERENCES sessions(session_id)
             )
         """
         )
-        try:
+        cursor = conn.execute("PRAGMA table_info(sessions)")
+        session_cols = {row["name"] for row in cursor.fetchall()}
+        if "dst_dir" not in session_cols:
             conn.execute("ALTER TABLE sessions ADD COLUMN dst_dir TEXT")
-        except Exception:
-            pass  # Column already exists
+
+        cursor = conn.execute("PRAGMA table_info(file_history)")
+        history_cols = {row["name"] for row in cursor.fetchall()}
+        if "phash" not in history_cols:
+            conn.execute("ALTER TABLE file_history ADD COLUMN phash TEXT")
     logging.info("SQLite database initialized successfully.")
 
 
@@ -71,12 +77,16 @@ def register_session(session_id, mode, dst_dir=None):
 
 
 def log_file_action(
-    session_id, original_path, organized_path, file_size, sha256, mtime
+    session_id, original_path, organized_path, file_size, sha256, mtime, phash=None
 ):
     """Logs a single file movement/copy operation in the file history."""
     with db_session() as conn:
         conn.execute(
-            "INSERT INTO file_history (session_id, original_path, organized_path, file_size, sha256, mtime, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            """
+            INSERT INTO file_history (
+                session_id, original_path, organized_path, file_size, sha256, mtime, status, phash
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
             (
                 session_id,
                 original_path,
@@ -85,6 +95,7 @@ def log_file_action(
                 sha256,
                 mtime,
                 "active",
+                phash,
             ),
         )
 

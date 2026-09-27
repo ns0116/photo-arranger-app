@@ -129,13 +129,15 @@ def check_memory_duplicate(src_path, size_map):
 
 
 def _log_file_action_safe(
-    session_id, src_path, dst_path, size, sha, mtime_val, db_write_lock
+    session_id, src_path, dst_path, size, sha, mtime_val, db_write_lock, phash=None
 ):
     """Calls log_file_action under a lock to serialise concurrent thread writes to SQLite."""
     from services.db_service import log_file_action
 
     with db_write_lock:
-        log_file_action(session_id, src_path, dst_path, size, sha, mtime_val)
+        log_file_action(
+            session_id, src_path, dst_path, size, sha, mtime_val, phash=phash
+        )
 
 
 def parse_naming_template(template_str, dt, original_filename):
@@ -215,11 +217,12 @@ def process_file_task(
 
     try:
         # EXIF優先、なければ更新日時
-        # Also performs corrupt-file / abnormal-date sanity checks (issue #32).
+        # Also performs corrupt-file / abnormal-date sanity checks (issue #32)
+        # and perceptual hash calculation (issue #25).
         # These are informational only: a flagged file still gets the same
         # date/fallback treatment as any other file so behavior for
         # non-flagged files is unaffected.
-        validation = get_exif_validation(src_path)
+        validation = get_exif_validation(src_path, include_phash=True)
         dt = validation["dt"]
         if not dt:
             mtime = os.path.getmtime(src_path)
@@ -341,6 +344,7 @@ def process_file_task(
                 ),
                 "log_type": log_type_map.get(action, "info"),
                 "warning": warning,
+                "phash": validation.get("phash"),
             }
 
         if local_cancel_event.is_set():
@@ -411,6 +415,7 @@ def process_file_task(
                         file_hash,
                         mtime_val,
                         db_write_lock,
+                        phash=validation.get("phash"),
                     )
                 except Exception as db_err:
                     logging.error(f"Failed to log file action: {db_err}")
@@ -452,6 +457,7 @@ def process_file_task(
             "message": message,
             "log_type": log_type,
             "warning": warning,
+            "phash": validation.get("phash"),
         }
 
     except Exception as e:
@@ -537,6 +543,7 @@ def arrange_photos(
     copied_count = 0
     skipped_count = 0
     error_count = 0
+    dry_run_items = []
 
     if max_workers is None:
         max_workers = (
@@ -610,6 +617,8 @@ def arrange_photos(
                         f"{res.get('src_dir')}/{res.get('filename')}: "
                         f"{res['warning']['message']}"
                     )
+                if dry_run and res.get("phash") and act not in ("skip", "error"):
+                    dry_run_items.append(res)
             elif res["status"] == "db_error":
                 # File was processed but DB logging failed — Undo will not cover this file
                 act = res.get("action")
@@ -638,6 +647,7 @@ def arrange_photos(
                 "message": res.get("message"),
                 "log_type": res.get("log_type", "info"),
                 "warning": res.get("warning"),
+                "phash": res.get("phash"),
                 "stats": {
                     "total": total_files,
                     "copied": copied_count,
@@ -647,7 +657,41 @@ def arrange_photos(
             }
             yield f"data: {json.dumps(progress_payload, ensure_ascii=False)}\n\n"
 
-    status_text = "シミュレーション完了" if dry_run else "処理完了"
+    # Compute near-duplicate pairs via perceptual hash (dHash) for Dry Run (issue #25)
+    similar_pairs = []
+    if dry_run and len(dry_run_items) > 1:
+        from utils.phash_utils import hamming_distance
+
+        n = len(dry_run_items)
+        for i in range(n):
+            item_a = dry_run_items[i]
+            for j in range(i + 1, n):
+                item_b = dry_run_items[j]
+                dist = hamming_distance(item_a["phash"], item_b["phash"])
+                if dist <= Config.PHASH_MAX_DISTANCE:
+                    similar_pairs.append(
+                        {
+                            "a": {
+                                "filename": item_a.get("filename"),
+                                "src_dir": item_a.get("src_dir"),
+                                "src_dir_full": item_a.get("src_dir_full"),
+                                "full_path": item_a.get("full_path"),
+                                "folder": item_a.get("folder"),
+                            },
+                            "b": {
+                                "filename": item_b.get("filename"),
+                                "src_dir": item_b.get("src_dir"),
+                                "src_dir_full": item_b.get("src_dir_full"),
+                                "full_path": item_b.get("full_path"),
+                                "folder": item_b.get("folder"),
+                            },
+                            "distance": dist,
+                        }
+                    )
+        similar_pairs.sort(key=lambda p: p["distance"])
+        if len(similar_pairs) > Config.PHASH_PAIR_LIMIT:
+            similar_pairs = similar_pairs[: Config.PHASH_PAIR_LIMIT]
+
     done_msg = get_txt(
         lang,
         "done_dryrun" if dry_run else "done_arrange",
@@ -664,4 +708,6 @@ def arrange_photos(
         "progress": 100,
         "log_type": "success",
     }
+    if dry_run:
+        done_payload["similar_pairs"] = similar_pairs
     yield f"data: {json.dumps(done_payload, ensure_ascii=False)}\n\n"

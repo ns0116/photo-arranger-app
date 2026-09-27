@@ -44,6 +44,11 @@ class Config:
     # abnormal, allowing a small buffer for clock skew between machines.
     EXIF_FUTURE_TOLERANCE_MINUTES = 5
 
+    # Perceptual hash (dHash) configuration (see issue #25)
+    PHASH_MAX_DISTANCE = 12
+    PHASH_DEFAULT_THRESHOLD = 5
+    PHASH_PAIR_LIMIT = 500
+
     # Date rules configuration
     NAMING_RULES = {
         "YYYY-MM-DD": "%Y-%m-%d",

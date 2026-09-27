@@ -208,6 +208,23 @@
                 </div>
                 <p class="preview-desc">※シミュレーションのため、実際のファイル操作は行われていません。</p>
                 <div id="preview-list" class="preview-list"></div>
+
+                <!-- 類似画像候補サブセクション (Issue #25) -->
+                <div id="similar-section" class="similar-section hidden">
+                    <div class="similar-header">
+                        <div class="similar-title-group">
+                            <h3 id="lbl-similar-title"><i class="fa-solid fa-clone"></i> 類似画像の重複候補</h3>
+                            <span id="similar-count" class="badge">0 組</span>
+                        </div>
+                        <div class="similar-slider-group">
+                            <label for="similar-threshold-slider" id="lbl-similar-threshold">類似度閾値 (Hamming距離 ≤ <span id="similar-threshold-val">5</span>):</label>
+                            <input type="range" id="similar-threshold-slider" min="0" max="12" value="5" step="1">
+                        </div>
+                    </div>
+                    <p class="similar-desc" id="lbl-similar-desc">※知覚ハッシュ(dHash)により検出された、構図や内容が酷似している画像の組み合わせです。</p>
+                    <div id="similar-list" class="similar-list"></div>
+                    <p id="similar-empty" class="similar-empty hidden">該当する類似画像はありません。</p>
+                </div>
             </section>
 
             <!-- プログレスカード -->
