@@ -123,6 +123,9 @@
                         <option value="YYYYMMDD">YYYYMMDD (例: 20260626)</option>
                         <option value="YYYY-MM">YYYY-MM (例: 2026-06)</option>
                         <option value="YYYY">YYYY (例: 2026)</option>
+                        <option value="{country}/{city}/{YYYY-MM-DD}" id="opt-location-country-city">【撮影地】国/都市/日付 (例: Japan/Tokyo/2026-06-26)</option>
+                        <option value="{city}/{YYYY-MM-DD}" id="opt-location-city">【撮影地】都市/日付 (例: Tokyo/2026-06-26)</option>
+                        <option value="{country_ja}/{city_ja}/{YYYY-MM-DD}" id="opt-location-country-city-ja">【撮影地(和名)】国/都市/日付 (例: 日本/東京/2026-06-26)</option>
                         <option value="custom" id="opt-custom-template">カスタム命名テンプレート...</option>
                     </select>
                 </div>
@@ -131,7 +134,7 @@
                 <div id="custom-template-group" class="form-group hidden" style="margin-top: 10px;">
                     <label for="custom-template" id="lbl-custom-template">命名テンプレート</label>
                     <input type="text" id="custom-template" class="form-control" placeholder="例: {YYYY}/{MM}/{YYYY}-{MM}-{DD}_{filename}{ext}" value="{YYYY}-{MM}-{DD}_{filename}{ext}" spellcheck="false">
-                    <small style="color: rgba(255,255,255,0.6);" id="text-custom-tokens">利用可能トークン: {YYYY}, {MM}, {DD}, {filename}, {ext}</small>
+                    <small style="color: rgba(255,255,255,0.6);" id="text-custom-tokens">利用可能トークン: {YYYY}, {MM}, {DD}, {filename}, {ext}, {country}, {city}, {country_ja}, {city_ja}, {gps}</small>
                 </div>
 
                 <!-- 詳細フィルタ設定 -->

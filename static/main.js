@@ -401,8 +401,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const optExt = isJa ? '拡張子' : 'Extension';
         const optSrc = isJa ? '元フォルダ名' : 'Source Folder';
         const optCam = isJa ? 'カメラ機種' : 'Camera Model';
-        const phVal = isJa ? '条件値 (例: .png, Screenshots)' : 'Value (e.g. .png, Screenshots)';
-        const phTarget = isJa ? '振り分け先 (例: Screenshots, Sony/{YYYY-MM})' : 'Target (e.g. Screenshots, Sony/{YYYY-MM})';
+        const optCity = isJa ? '都市名 (撮影地)' : 'City';
+        const optCountry = isJa ? '国名 (撮影地)' : 'Country';
+        const optGps = isJa ? 'GPS有無' : 'Has GPS';
+        const phVal = isJa ? '条件値 (例: .png, Tokyo, true)' : 'Value (e.g. .png, Tokyo, true)';
+        const phTarget = isJa ? '振り分け先 (例: Screenshots, Travel/{city})' : 'Target (e.g. Screenshots, Travel/{city})';
 
         row.innerHTML = `
             <span class="rule-num">#</span>
@@ -410,6 +413,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 <option value="extension"${fieldVal === 'extension' ? ' selected' : ''}>${optExt}</option>
                 <option value="source_folder"${fieldVal === 'source_folder' ? ' selected' : ''}>${optSrc}</option>
                 <option value="camera_model"${fieldVal === 'camera_model' ? ' selected' : ''}>${optCam}</option>
+                <option value="city"${fieldVal === 'city' ? ' selected' : ''}>${optCity}</option>
+                <option value="country"${fieldVal === 'country' ? ' selected' : ''}>${optCountry}</option>
+                <option value="has_gps"${fieldVal === 'has_gps' ? ' selected' : ''}>${optGps}</option>
             </select>
             <input type="text" class="rule-val-input" placeholder="${phVal}" value="${escapeHtml(valVal)}" spellcheck="false">
             <i class="fa-solid fa-arrow-right-long rule-arrow"></i>
@@ -835,6 +841,23 @@ document.addEventListener('DOMContentLoaded', () => {
                     <i class="fa-solid fa-code-branch"></i> ${escapeHtml(item.applied_rule.name || item.applied_rule.value)}
                 </span>
             ` : '';
+
+            const loc = item.location;
+            let locBadgeHtml = '';
+            if (loc && loc.has_gps) {
+                const locText = currentLang === 'ja'
+                    ? (loc.city_ja !== '位置情報なし' ? `${loc.city_ja} (${loc.country_ja})` : loc.country_ja)
+                    : (loc.city !== 'No_Location' ? `${loc.city}, ${loc.country}` : loc.country);
+                const locTitle = (loc.lat !== null && loc.lon !== null)
+                    ? `${locText} [${loc.lat.toFixed(4)}, ${loc.lon.toFixed(4)}]`
+                    : locText;
+                locBadgeHtml = `
+                    <span class="p-badge p-badge-location" title="${escapeHtml(locTitle)}">
+                        <i class="fa-solid fa-location-dot"></i> ${escapeHtml(locText)}
+                    </span>
+                `;
+            }
+
             row.innerHTML = `
                 <div class="preview-row-main">
                     ${thumbHtml}
@@ -843,6 +866,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                     <div class="preview-details">
                         ${ruleBadgeHtml}
+                        ${locBadgeHtml}
                         <span class="p-badge ${escapeHtml(badgeClass)}">${escapeHtml(badgeText)}</span>
                         <i class="fa-solid fa-arrow-right-long preview-arrow"></i>
                         <span class="preview-dest-folder" title="${destEscaped}">${destEscaped}</span>
@@ -1147,14 +1171,20 @@ document.addEventListener('DOMContentLoaded', () => {
             'lbl-similar-threshold': '類似度閾値 (Hamming距離 ≤ {val}):',
             'lbl-similar-desc': '※知覚ハッシュ(dHash)により検出された、構図や内容が酷似している画像の組み合わせです。',
             'similar-empty': '該当する類似画像はありません。',
+            'opt-location-country-city': '【撮影地】国/都市/日付 (例: Japan/Tokyo/2026-06-26)',
+            'opt-location-city': '【撮影地】都市/日付 (例: Tokyo/2026-06-26)',
+            'opt-location-country-city-ja': '【撮影地(和名)】国/都市/日付 (例: 日本/東京/2026-06-26)',
             'lbl-conditional-rules': '条件分岐ルール',
             'lbl-rules-desc': '上から順に評価され、最初に一致したルールに従って指定フォルダへ振り分けられます。一致しないファイルは上記の日付命名規則が適用されます。',
             'lbl-add-rule': 'ルールを追加',
             'rule-field-extension': '拡張子',
             'rule-field-source_folder': '元フォルダ名',
             'rule-field-camera_model': 'カメラ機種',
-            'rule-placeholder-value': '条件値 (例: .png, Screenshots)',
-            'rule-placeholder-target': '振り分け先 (例: Screenshots, Sony/{YYYY-MM})',
+            'rule-field-city': '都市名 (撮影地)',
+            'rule-field-country': '国名 (撮影地)',
+            'rule-field-has_gps': 'GPS有無',
+            'rule-placeholder-value': '条件値 (例: .png, Tokyo, true)',
+            'rule-placeholder-target': '振り分け先 (例: Screenshots, Travel/{city})',
             'btn-remove-rule-title': 'ルールを削除',
             'lbl-watcher-title': 'フォルダ監視・自動整理モード',
             'lbl-watcher-desc': '指定したコピー元フォルダをバックグラウンドで定期監視し、新しい写真や動画が追加されると自動的に整理を実行します。',
@@ -1189,9 +1219,12 @@ document.addEventListener('DOMContentLoaded', () => {
             'lbl-copy': 'Copy',
             'lbl-move': 'Move (Delete source)',
             'lbl-naming-rule': 'Folder Naming Rules',
+            'opt-location-country-city': '[Location] Country/City/Date (e.g. Japan/Tokyo/2026-06-26)',
+            'opt-location-city': '[Location] City/Date (e.g. Tokyo/2026-06-26)',
+            'opt-location-country-city-ja': '[Location (JA)] Country/City/Date (e.g. 日本/東京/2026-06-26)',
             'opt-custom-template': 'Custom Naming Template...',
             'lbl-custom-template': 'Naming Template',
-            'text-custom-tokens': 'Available tokens: {YYYY}, {MM}, {DD}, {filename}, {ext}',
+            'text-custom-tokens': 'Available tokens: {YYYY}, {MM}, {DD}, {filename}, {ext}, {country}, {city}, {country_ja}, {city_ja}, {gps}',
             'lbl-advanced-filters': 'Advanced Filter Settings',
             'lbl-filter-extensions': 'Target Extensions (Select multiple)',
             'lbl-filter-date': 'Target Date Range',
@@ -1233,8 +1266,11 @@ document.addEventListener('DOMContentLoaded', () => {
             'rule-field-extension': 'Extension',
             'rule-field-source_folder': 'Source Folder',
             'rule-field-camera_model': 'Camera Model',
-            'rule-placeholder-value': 'Value (e.g. .png, Screenshots)',
-            'rule-placeholder-target': 'Target (e.g. Screenshots, Sony/{YYYY-MM})',
+            'rule-field-city': 'City (Location)',
+            'rule-field-country': 'Country (Location)',
+            'rule-field-has_gps': 'Has GPS',
+            'rule-placeholder-value': 'Value (e.g. .png, Tokyo, true)',
+            'rule-placeholder-target': 'Target (e.g. Screenshots, Travel/{city})',
             'btn-remove-rule-title': 'Remove rule',
             'lbl-watcher-title': 'Folder Watcher / Auto-Organize',
             'lbl-watcher-desc': 'Monitors source directories periodically in the background and automatically organizes new photos.',
@@ -1294,6 +1330,12 @@ document.addEventListener('DOMContentLoaded', () => {
         toggleMove.innerHTML = `<i class="fa-solid fa-arrows-turn-to-dots"></i> ${dict['lbl-move']}`;
         
         document.getElementById('lbl-naming-rule').innerHTML = `<i class="fa-solid fa-signature"></i> ${dict['lbl-naming-rule']}`;
+        const optLocCC = document.getElementById('opt-location-country-city');
+        if (optLocCC) optLocCC.textContent = dict['opt-location-country-city'];
+        const optLocC = document.getElementById('opt-location-city');
+        if (optLocC) optLocC.textContent = dict['opt-location-city'];
+        const optLocCCJa = document.getElementById('opt-location-country-city-ja');
+        if (optLocCCJa) optLocCCJa.textContent = dict['opt-location-country-city-ja'];
         document.getElementById('opt-custom-template').textContent = dict['opt-custom-template'];
         document.getElementById('lbl-custom-template').textContent = dict['lbl-custom-template'];
         document.getElementById('text-custom-tokens').textContent = dict['text-custom-tokens'];
@@ -1320,6 +1362,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (optSrc) optSrc.textContent = dict['rule-field-source_folder'];
                     const optCam = select.querySelector('option[value="camera_model"]');
                     if (optCam) optCam.textContent = dict['rule-field-camera_model'];
+                    const optCity = select.querySelector('option[value="city"]');
+                    if (optCity) optCity.textContent = dict['rule-field-city'];
+                    const optCountry = select.querySelector('option[value="country"]');
+                    if (optCountry) optCountry.textContent = dict['rule-field-country'];
+                    const optGps = select.querySelector('option[value="has_gps"]');
+                    if (optGps) optGps.textContent = dict['rule-field-has_gps'];
                 }
                 const valInput = row.querySelector('.rule-val-input');
                 if (valInput) valInput.placeholder = dict['rule-placeholder-value'];

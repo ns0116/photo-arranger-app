@@ -1185,6 +1185,13 @@ footer {
     font-weight: 500;
 }
 
+.p-badge-location {
+    background: rgba(16, 185, 129, 0.18);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.35);
+    font-weight: 500;
+}
+
 @media (max-width: 640px) {
     .rule-row {
         flex-wrap: wrap;
