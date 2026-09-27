@@ -57,6 +57,24 @@ def test_validation_normal_image_not_flagged(temp_workspace, image_creator):
     assert result["abnormal_reason"] is None
 
 
+def test_validation_extracts_camera_model(temp_workspace, image_creator):
+    """Test get_exif_validation correctly extracts the camera model tag."""
+    filepath = os.path.join(temp_workspace["src"], "with_camera.jpg")
+    image_creator(filepath, camera_model="ILCE-7M4")
+
+    result = get_exif_validation(filepath)
+    assert result["camera_model"] == "ILCE-7M4"
+
+
+def test_validation_no_camera_model(temp_workspace, image_creator):
+    """Test get_exif_validation returns None for camera_model when not present."""
+    filepath = os.path.join(temp_workspace["src"], "no_camera.jpg")
+    image_creator(filepath)
+
+    result = get_exif_validation(filepath)
+    assert result["camera_model"] is None
+
+
 def test_validation_no_exif_image_not_flagged(temp_workspace, image_creator):
     """A valid image with no EXIF date at all is not corrupt nor abnormal."""
     filepath = os.path.join(temp_workspace["src"], "no_exif.jpg")

@@ -79,6 +79,39 @@ def test_arrange_route_dry_run(client, csrf_headers, temp_workspace, image_creat
     assert "completed" in stream_content
 
 
+def test_arrange_route_with_rules(client, csrf_headers, temp_workspace, image_creator):
+    """Test POST /api/arrange accepts rules parameter and streams rule results."""
+    src = temp_workspace["src"]
+    dst = temp_workspace["dst"]
+    image_creator(os.path.join(src, "doc.png"))
+
+    response = client.post(
+        "/api/arrange",
+        json={
+            "src_dirs": [src],
+            "dst_dir": dst,
+            "naming_rule": "YYYY-MM-DD",
+            "mode": "copy",
+            "dry_run": True,
+            "rules": [
+                {
+                    "id": "r1",
+                    "field": "extension",
+                    "value": ".png",
+                    "target_folder": "Screenshots",
+                }
+            ],
+        },
+        headers=csrf_headers,
+    )
+
+    assert response.status_code == 200
+    assert response.mimetype == "text/event-stream"
+    stream_content = response.data.decode("utf-8")
+    assert "Screenshots" in stream_content
+    assert "applied_rule" in stream_content
+
+
 @pytest.mark.skip(reason="Skipped test to match test structure guidelines")
 def test_skipped_requirement():
     """Skipped test for tracking structural requirements."""

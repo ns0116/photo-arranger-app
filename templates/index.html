@@ -189,6 +189,24 @@
                     </div>
                 </details>
 
+                <!-- 条件分岐ルール設定 (Issue #28) -->
+                <details id="rules-details" class="advanced-settings-details" style="margin-top: 15px; color: white;">
+                    <summary style="cursor: pointer; font-weight: bold; margin-bottom: 8px;" id="lbl-conditional-rules">
+                        <i class="fa-solid fa-code-branch"></i> 条件分岐ルール
+                    </summary>
+                    <div class="advanced-settings-content" style="padding: 10px; background: rgba(255,255,255,0.05); border-radius: 8px;">
+                        <p style="font-size: 0.85em; color: rgba(255,255,255,0.7); margin-bottom: 10px; line-height: 1.4;" id="lbl-rules-desc">
+                            上から順に評価され、最初に一致したルールに従って指定フォルダへ振り分けられます。一致しないファイルは上記の日付命名規則が適用されます。
+                        </p>
+                        <div id="rules-container" class="rules-container">
+                            <!-- JSで動的生成されるルール行 -->
+                        </div>
+                        <button type="button" id="btn-add-rule" class="btn btn-outline btn-block-sm" style="margin-top: 8px;">
+                            <i class="fa-solid fa-plus"></i> <span id="lbl-add-rule">ルールを追加</span>
+                        </button>
+                    </div>
+                </details>
+
                 <!-- アクションボタン -->
                 <div class="action-buttons">
                     <button type="button" id="btn-dryrun" class="btn btn-secondary flex-1">

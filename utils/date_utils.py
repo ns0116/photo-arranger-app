@@ -32,6 +32,20 @@ def _extract_exif_datetime(img):
     return None
 
 
+def _extract_exif_camera_model(img):
+    """Extracts the camera model string from EXIF data, or None if not present."""
+    exif_data = img.getexif()
+    if not exif_data:
+        return None
+    val = exif_data.get(0x0110)
+    if val and isinstance(val, str):
+        return val.strip()
+    for tag, value in exif_data.items():
+        if TAGS.get(tag, tag) == "Model" and isinstance(value, str):
+            return value.strip()
+    return None
+
+
 def get_exif_validation(filepath, include_phash=False):
     """Inspects an image file for decode failures and EXIF date sanity.
 
@@ -46,6 +60,7 @@ def get_exif_validation(filepath, include_phash=False):
     Returns a dict:
         {
             "dt": datetime | None,        # resolved EXIF date-taken, if any
+            "camera_model": str | None,   # EXIF camera model, if any
             "corrupt": bool,               # True if Pillow could not decode the file
             "corrupt_detail": str | None,  # raw (untranslated) exception detail
             "abnormal_date": bool,         # True if dt is implausible
@@ -55,6 +70,7 @@ def get_exif_validation(filepath, include_phash=False):
     """
     result = {
         "dt": None,
+        "camera_model": None,
         "corrupt": False,
         "corrupt_detail": None,
         "abnormal_date": False,
@@ -73,6 +89,7 @@ def get_exif_validation(filepath, include_phash=False):
             # rather than surfacing later during processing.
             img.load()
             result["dt"] = _extract_exif_datetime(img)
+            result["camera_model"] = _extract_exif_camera_model(img)
 
             if include_phash:
                 try:
