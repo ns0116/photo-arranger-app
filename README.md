@@ -54,6 +54,8 @@
 ### パッケージ化とビルド（デスクトップアプリ化）
 本アプリは `PyInstaller` を使用して、Pythonのインストール不要なスタンドアローン形式（macOSの `.app` / Windowsの `.exe` / Linuxのスタンドアローン実行バイナリ）にパッケージ化できます。
 
+> **注意**: アプリのビルドには各OSの実機環境（またはGUI環境）が必要です。クラウドサンドボックス等のヘッドレス環境ではスタンドアローンアプリのビルドや動作検証は行えません。
+
 1. **macOSでビルドする場合**:
    ```bash
    ./scripts/build_app.sh
@@ -180,6 +182,8 @@ Evolved from a basic shell script `arrange_photos_yyyymmdd.sh`, this tool now of
 
 ### Packaging and Building (Standalone App)
 You can bundle this application into a standalone desktop application (macOS `.app`, Windows `.exe`, or Linux executable binary) using `PyInstaller`.
+
+> **Note**: Building the application requires physical hardware or a desktop GUI environment on each target OS. Standalone apps cannot be built or validated in headless cloud sandboxes or containers without GUI support.
 
 1. **Building on macOS**:
    Run the build script in your terminal:

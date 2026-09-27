@@ -1,3 +1,11 @@
+"""
+アイコン生成スクリプト（macOS専用）
+
+注意:
+本スクリプトは macOS 標準の `sips` および `iconutil` コマンドを使用しているため、
+macOS 専用です。Linux / Windows / クラウドサンドボックス環境では動作しません。
+"""
+
 import os
 import subprocess
 
