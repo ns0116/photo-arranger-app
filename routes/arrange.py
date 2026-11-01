@@ -75,4 +75,4 @@ def cancel():
     """Cancel the ongoing arrangement process."""
     _verify_csrf()
     cancel_event.set()
-    return jsonify({"message": "キャンセルシグナルを送信しました。"})
+    return jsonify({"message": "キャンセルを要求しました。"})

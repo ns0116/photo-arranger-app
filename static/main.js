@@ -487,7 +487,7 @@ document.addEventListener('DOMContentLoaded', () => {
             addLog(data.message, 'info');
         } catch (error) {
             console.error('Cancel request failed:', error);
-            addLog('中断シグナルの送信に失敗しました。', 'error');
+            addLog('中断の要求を送れませんでした。', 'error');
             btnCancel.disabled = false;
             btnCancel.innerHTML = `<i class="fa-solid fa-hand"></i> ${currentLang === 'ja' ? '中断' : 'Cancel'}`;
         }
@@ -804,7 +804,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     'move': '移動',
                     'skip': '重複スキップ',
                     'rename': 'リネーム',
-                    'rename_move': '名変移動',
+                    'rename_move': '名前を変えて移動',
                     'error': 'エラー'
                 },
                 en: {
@@ -1122,12 +1122,12 @@ document.addEventListener('DOMContentLoaded', () => {
             'prompt-profile-name': '保存するプロファイル名を入力してください',
             'confirm-profile-overwrite': '「{name}」は既に存在します。上書きしますか？',
             'confirm-profile-delete': '「{name}」を削除しますか？',
-            'error-profile-last': '最低1つのプロファイルが必要なため、これ以上削除できません。',
-            'lbl-src-dirs': 'コピー元ディレクトリ',
+            'error-profile-last': 'プロファイルは最低1つ必要なため、これ以上削除できません。',
+            'lbl-src-dirs': 'コピー元フォルダ',
             'placeholder-src': '整理する写真が入っているフォルダのパス',
             'btn-select': '選択',
             'btn-add-src': 'フォルダを追加',
-            'lbl-dst-dir': 'コピー先ディレクトリ',
+            'lbl-dst-dir': 'コピー先フォルダ',
             'placeholder-dst': '整理した写真を保存するフォルダのパス',
             'lbl-mode': '処理モード',
             'lbl-copy': 'コピー',
@@ -1145,22 +1145,22 @@ document.addEventListener('DOMContentLoaded', () => {
             'preview-desc-text': '※シミュレーションのため、実際のファイル操作は行われていません。',
             'lbl-processing-file': '処理中のファイル',
             'lbl-total-files': '総件数',
-            'lbl-copied-files': 'コピー済',
-            'lbl-moved-files': '移動済',
+            'lbl-copied-files': 'コピー済み',
+            'lbl-moved-files': '移動済み',
             'lbl-skipped-files': '重複スキップ',
             'lbl-error-files': 'エラー',
             'title-log': '実行ログ',
             'lbl-undo': '元に戻す (Undo)',
             'btn-clear': 'クリア',
-            'shutdown-confirm': 'サーバーをシャットダウンしますか？終了すると再度起動するまでアプリは利用できなくなります。',
-            'error-select-dirs': 'コピー元とコピー先のディレクトリを指定してください。',
+            'shutdown-confirm': 'サーバーをシャットダウンしますか？終了すると再起動するまでアプリは利用できなくなります。',
+            'error-select-dirs': 'コピー元とコピー先のフォルダを指定してください。',
             'shutdown-title-screen': 'サーバーを終了しました',
             'shutdown-desc-screen': 'ブラウザのタブを閉じて問題ありません。',
             'title-report': 'レポート',
             'lbl-refresh-report': '更新',
             'text-report-empty': 'まだ整理履歴がありません。',
             'lbl-report-sessions': '実行回数',
-            'lbl-report-total-files': '整理済ファイル',
+            'lbl-report-total-files': '整理済みファイル',
             'lbl-report-copy-files': 'コピー',
             'lbl-report-move-files': '移動',
             'lbl-report-total-size': '合計サイズ',
@@ -1175,7 +1175,7 @@ document.addEventListener('DOMContentLoaded', () => {
             'opt-location-city': '【撮影地】都市/日付 (例: Tokyo/2026-06-26)',
             'opt-location-country-city-ja': '【撮影地(和名)】国/都市/日付 (例: 日本/東京/2026-06-26)',
             'lbl-conditional-rules': '条件分岐ルール',
-            'lbl-rules-desc': '上から順に評価され、最初に一致したルールに従って指定フォルダへ振り分けられます。一致しないファイルは上記の日付命名規則が適用されます。',
+            'lbl-rules-desc': '上から順に評価され、最初に一致したルールに従って指定フォルダへ振り分けられます。一致しないファイルには上記の日付命名規則が適用されます。',
             'lbl-add-rule': 'ルールを追加',
             'rule-field-extension': '拡張子',
             'rule-field-source_folder': '元フォルダ名',
@@ -1287,9 +1287,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateStatsLabels() {
         const dict = uiStrings[currentLang];
         if (selectedMode === 'move') {
-            statCopiedLabel.textContent = currentLang === 'ja' ? '移動済/予定' : 'Moved';
+            statCopiedLabel.textContent = currentLang === 'ja' ? '移動済み/予定' : 'Moved';
         } else {
-            statCopiedLabel.textContent = currentLang === 'ja' ? 'コピー済/予定' : 'Copied';
+            statCopiedLabel.textContent = currentLang === 'ja' ? 'コピー済み/予定' : 'Copied';
         }
     }
 

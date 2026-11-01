@@ -67,7 +67,7 @@
                 <!-- 複数ソースディレクトリ -->
                 <div class="form-group">
                     <label id="lbl-src-dirs">
-                        <i class="fa-regular fa-folder-open"></i> コピー元ディレクトリ
+                        <i class="fa-regular fa-folder-open"></i> コピー元フォルダ
                     </label>
                     <div id="src-dirs-container" class="src-dirs-container">
                         <div class="input-with-btn src-dir-row">
@@ -88,7 +88,7 @@
                 <!-- ターゲットディレクトリ -->
                 <div class="form-group">
                     <label for="dst-dir" id="lbl-dst-dir">
-                        <i class="fa-solid fa-folder-tree"></i> コピー先（整理先）ディレクトリ
+                        <i class="fa-solid fa-folder-tree"></i> コピー先（整理先）フォルダ
                     </label>
                     <div class="input-with-btn">
                         <input type="text" id="dst-dir" placeholder="整理後のフォルダを作成するパス" spellcheck="false">
@@ -199,7 +199,7 @@
                     </summary>
                     <div class="advanced-settings-content" style="padding: 10px; background: rgba(255,255,255,0.05); border-radius: 8px;">
                         <p style="font-size: 0.85em; color: rgba(255,255,255,0.7); margin-bottom: 10px; line-height: 1.4;" id="lbl-rules-desc">
-                            上から順に評価され、最初に一致したルールに従って指定フォルダへ振り分けられます。一致しないファイルは上記の日付命名規則が適用されます。
+                            上から順に評価され、最初に一致したルールに従って指定フォルダへ振り分けられます。一致しないファイルには上記の日付命名規則が適用されます。
                         </p>
                         <div id="rules-container" class="rules-container">
                             <!-- JSで動的生成されるルール行 -->
@@ -314,7 +314,7 @@
                         </div>
                         <div class="stat-box success">
                             <span class="stat-num" id="stat-copied">0</span>
-                            <span class="stat-label" id="stat-copied-label">コピー済</span>
+                            <span class="stat-label" id="stat-copied-label">コピー済み</span>
                         </div>
                         <div class="stat-box info">
                             <span class="stat-num" id="stat-skipped">0</span>
@@ -361,7 +361,7 @@
                         </div>
                         <div class="stat-box success">
                             <span class="stat-num" id="report-total-files">0</span>
-                            <span class="stat-label" id="lbl-report-total-files">整理済ファイル</span>
+                            <span class="stat-label" id="lbl-report-total-files">整理済みファイル</span>
                         </div>
                         <div class="stat-box info">
                             <span class="stat-num" id="report-copy-files">0</span>
