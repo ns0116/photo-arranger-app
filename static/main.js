@@ -1187,7 +1187,7 @@ document.addEventListener('DOMContentLoaded', () => {
             'rule-placeholder-target': '振り分け先 (例: Screenshots, Travel/{city})',
             'btn-remove-rule-title': 'ルールを削除',
             'lbl-watcher-title': 'フォルダ監視・自動整理モード',
-            'lbl-watcher-desc': '指定したコピー元フォルダをバックグラウンドで定期監視し、新しい写真や動画が追加されると自動的に整理を実行します。',
+            'lbl-watcher-desc': '指定したコピー元フォルダをバックグラウンドで定期的に監視し、新しい写真や動画が追加されると自動で整理します。',
             'lbl-watcher-toggle-text': '監視を有効にする',
             'lbl-watcher-interval': '監視間隔:',
             'lbl-watcher-last-run': '最終実行:',
