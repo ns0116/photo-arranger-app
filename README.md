@@ -1,5 +1,9 @@
 # Photo Arranger
 
+> **凍結（2026-11-07）**: このリポジトリは手入れを止めています。コードはそのまま残しますが、依存関係の更新や不具合の修正は行いません。
+>
+> **Frozen (2026-11-07)**: This repository is no longer maintained. The code stays as-is, with no dependency updates or bug fixes.
+
 [日本語](#日本語) | [English](#english)
 
 ---
